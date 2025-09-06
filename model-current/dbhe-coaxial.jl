@@ -22,7 +22,7 @@ mkpath(path)
 # Physical parameters ##########################################################
 
 # Maximum simulation time [s]
-sim_time = 2400 # 40 minutes
+sim_time = 30 # 40 minutes
 
 # Earth surface temperature [°C]
 ϕs = 20
@@ -109,7 +109,7 @@ rz = 0:dz:zz
 dtd = (1/(2*maximum([dr,dp,df]))*(1/dx^2+1/dy^2+1/dy^2)^-1)
 dtc = minimum([dx/norm(vx0), dy/norm(vy0), dz/norm(vz0)])
 dt = minimum([dtd,dtc])
-#dt = dt/10
+# dt = dt/10
 println("dt:$dt")
 
 # No. of time iterations
@@ -136,6 +136,7 @@ d = zeros(ii,jj,kk)
 vx = zeros(ii,jj,kk)
 vy = zeros(ii,jj,kk)
 vz = zeros(ii,jj,kk)
+R = zeros(ii,jj,kk)
 xc, yc = ii÷2*dx, jj÷2*dy
 for k in 1:kk
     zk = k*dz
@@ -143,7 +144,9 @@ for k in 1:kk
         yj = j*dy
         for i in 1:ii
             xi = i*dx
+            r = norm([xi - xc, yj - yc])
             r = norm([xi,yj]-[xc,yc])
+            R[i,j,k] = r
             if r < r1  # inside inner pipe
                 d[i,j,k] = df
                 vx[i,j,k] = 0
@@ -243,10 +246,28 @@ end
     updateϕ_boundaries!(ϕ1,ii,jj,kk,dx,dy,dz)
     
     # Save ϕ
-    if t % 10 == 0
+    if t % 1 == 0
         println("Iteration:$t, time:$(round(t*dt,digits=2))s, bottom temp:$(round(ϕ2[ii÷2,jj÷2,kk-1],digits=4))°C")
-        save(path,"temperature",ϕ2,rx,ry,rz,t)
+        # save(path,"temperature",ϕ2,rx,ry,rz,t)
     end
 end
 
 # 3209.602894 seconds (166.23 G allocations: 2.688 TiB, 7.91% gc time, 0.01% compilation time)
+
+
+# Iteration:0, time:0.0s, bottom temp:20.0°C
+# Iteration:2, time:2.0s, bottom temp:20.7681°C
+# Iteration:4, time:4.0s, bottom temp:21.4182°C
+# Iteration:6, time:6.0s, bottom temp:21.9684°C
+# Iteration:8, time:8.0s, bottom temp:22.434°C
+# Iteration:10, time:10.0s, bottom temp:22.8282°C
+# Iteration:12, time:12.0s, bottom temp:23.1618°C
+# Iteration:14, time:14.0s, bottom temp:23.4441°C
+# Iteration:16, time:16.0s, bottom temp:23.6831°C
+# Iteration:18, time:18.0s, bottom temp:23.8854°C
+# Iteration:20, time:20.0s, bottom temp:24.0566°C
+# Iteration:22, time:22.0s, bottom temp:24.2015°C
+# Iteration:24, time:24.0s, bottom temp:24.3241°C
+# Iteration:26, time:26.0s, bottom temp:24.4279°C
+# Iteration:28, time:28.0s, bottom temp:24.5158°C
+# Iteration:30, time:30.0s, bottom temp:24.5901°C
