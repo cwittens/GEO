@@ -233,7 +233,7 @@ function updateϕ_boundaries!(ϕ,ii,jj,kk,dx,dy,dz)
 end
 
 # Run simulation
-for t = 0:2:tt
+@time for t = 0:2:tt
     # Update ϕ
     updateϕ_domain!(ϕ2,ϕ1,d,vx,vy,vz,dx,dy,dz,dt,xc,yc,r1,t1,r2)
     updateϕ_boundaries!(ϕ2,ii,jj,kk,dx,dy,dz)
@@ -249,3 +249,4 @@ for t = 0:2:tt
     end
 end
 
+# 3209.602894 seconds (166.23 G allocations: 2.688 TiB, 7.91% gc time, 0.01% compilation time)
