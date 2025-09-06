@@ -249,4 +249,5 @@ end
     end
 end
 
+# for 24simulation time and using salloc --mem=32G -t 2:00:00 --gres=gpu:h100:1
 # 3209.602894 seconds (166.23 G allocations: 2.688 TiB, 7.91% gc time, 0.01% compilation time)
