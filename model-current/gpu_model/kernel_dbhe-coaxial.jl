@@ -3,7 +3,7 @@ Pkg.activate(@__DIR__)
 # Pkg.instantiate() # if everything works as expected, only run this and not "Pkg.add(...)"
 
 # add more packages if needed here
-# Pkg.add("OrdinaryDiffEqSymplecticRK") 
+# Pkg.add("OrdinaryDiffEqLowOrderRK")
 # Pkg.add("OrdinaryDiffEqTsit5")
 # Pkg.add("OrdinaryDiffEqLowStorageRK")
 # Pkg.add("DiffEqCallbacks")
@@ -14,7 +14,7 @@ Pkg.activate(@__DIR__)
 # Pkg.add("CUDA")
 # Pkg.add("AMDGPU")
 
-using OrdinaryDiffEqSymplecticRK
+using OrdinaryDiffEqLowOrderRK
 using OrdinaryDiffEqTsit5
 using OrdinaryDiffEqLowStorageRK
 using DiffEqCallbacks
@@ -25,7 +25,9 @@ using Adapt
 using CUDA
 using AMDGPU
 
-# include("helper_function.jl")
+include("helper_function.jl")
+
+
 
 ################################################################################
 # Diffusion convection equation for temperature in a pipe-in-pipe geometry
@@ -113,7 +115,7 @@ all_physical_parameters = (; ϕs, ρr, cr, λr, dr, ϕ0, r1, t1, h1, r2, t2, h2,
 # Simulation parameters #########################################################
 
 # Simulation time [s]
-tspan = (0.0, 30.0)
+tspan = (0.0, 300.0)
 
 # Geometry distances [m] (include both points 0.0 and 1.0)
 xmin, xmax = 0.0, 1.0
@@ -128,17 +130,6 @@ Nz = 81
 xc = (xmax - xmin) / 2
 yc = (ymax - ymin) / 2
 
-# to make it the same as in model-current/dbhe-coaxial.jl
-# xmin, xmax = 0.01, 1.0
-# ymin, ymax = 0.01, 1.0
-# zmin, zmax = 0.125, h2 + 1
-
-# Nx = 100
-# Ny = 100
-# Nz = 80
-
-# xc = 0.5
-# yc = 0.5
 
 function get_grid(N, min, max)
     return range(min, max, length=N)
@@ -163,7 +154,7 @@ vz = zero(ϕ)
 
 function initial_condition(x, y, z, xc, yc, all_physical_parameters)
     (; r1, t1, r2, t2, ϕ0, df, uf, ϕs, dp) = all_physical_parameters
-    r = norm([x - xc, y - yc])
+    r = sqrt((x - xc)^2 + (y - yc)^2)
     if r < r1 # inside inner pipe
         d_val = df
         vx_val = 0
@@ -212,18 +203,14 @@ end
 # TODO first only one kernel. Later diff and conv in separate kernels with pre mapped inside pipe and between pipes coordinates
 @kernel function kernel_rhs!(dϕ, @Const(ϕ), @Const(d), @Const(vx), @Const(vy), @Const(vz), @Const(gridx), @Const(gridy), xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv)
     i, j, k = @index(Global, NTuple)
-    i += 1
-    j += 1
-    k += 1
-
-
+    i, j, k = i + 1, j + 1, k + 1
 
     half = eltype(ϕ)(0.5)
 
     # Convective term
     x = gridx[i]
     y = gridy[j]
-    r = norm([x - xc, y - yc])
+     r = sqrt((x - xc)^2 + (y - yc)^2)
     if r < r1 # inside inner pipe
         conv = (
             ε * vx[i, j, k] * (ϕ[i+1, j, k] - ϕ[i, j, k]) * dx_inv
@@ -294,24 +281,8 @@ end
 
 
 
-function apply_boundary_conditions_cpu_only!(ϕ, gridz)
-    ϕ[1, 2:end-1, 2:end-1] .= ϕ[2, 2:end-1, 2:end-1]
-    ϕ[end, 2:end-1, 2:end-1] .= ϕ[end-1, 2:end-1, 2:end-1]
-    ϕ[2:end-1, 1, 2:end-1] .= ϕ[2:end-1, 2, 2:end-1]
-    ϕ[2:end-1, end, 2:end-1] .= ϕ[2:end-1, end-1, 2:end-1]
-    ϕ[2:end-1, 2:end-1, 1] .= ϕ[2:end-1, 2:end-1, 2]
-    ϕ[2:end-1, 2:end-1, end] .= ϕ0(gridz[end])
-    return nothing
-end
-
-
-
-
 function rhs!(dϕ, ϕ, cache, t)
-    (; d, vx, vy, vz, gridx, gridy, gridz, Nx, Ny, Nz, xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv) = cache
-
-    backend = get_backend(ϕ)
-    ϕ0_val = ϕ0(gridz[end])
+    (; backend, d, vx, vy, vz, gridx, gridy, gridz, Nx, Ny, Nz, xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv, ϕ0_val) = cache
 
     kernel_boundary_x!(backend)(ϕ, Nx, ndrange=(Ny - 2, Nz - 2))
     kernel_boundary_y!(backend)(ϕ, Ny, ndrange=(Nx - 2, Nz - 2))
@@ -323,25 +294,34 @@ function rhs!(dϕ, ϕ, cache, t)
     return nothing
 end
 
-dx, dy, dz = step(gridx), step(gridy), step(gridz)
-dx_inv, dy_inv, dz_inv = 1 / dx, 1 / dy, 1 / dz
 
-cache = (; d, vx, vy, vz, gridx, gridy, gridz, Nx, Ny, Nz, xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv, dz)
+backend = ROCBackend() # or ROCBackend() or CUDABackend() or CPU()
+# backend = CPU()
+cache = create_cache(backend=backend, d=d, vx=vx, vy=vy, vz=vz, gridx=gridx, gridy=gridy, gridz=gridz, r1=r1, t1=t1, r2=r2, ε=ε)
+ϕ_adapt = adapt(backend, ϕ)
 
-saveat = 0:1:30
-prob = ODEProblem(rhs!, ϕ, tspan, cache)
+tspan = (0.0, 2400.0)
+prob = ODEProblem(rhs!, ϕ_adapt, tspan, cache)
 
-@time sol = solve(prob, RDPK3SpFSAL35(), save_everystep=false, saveat=saveat, abstol=1e-1, reltol=1e-1);
+
+
+saveat = range(tspan..., 100)
+@time sol = solve(prob, RDPK3SpFSAL35(), save_everystep=false, abstol=1e-3, reltol=1e-3);#, saveat=saveat);
+
+temp = [adapt(CPU(),sol[i])[50, 50, 80] for i in 1:length(sol.t)]
+
+for (i, t) in enumerate(sol.t)
+    println("using adaptive time integration: t = $(round(t, digits = 2)) s, ϕ = $(round(temp[i], digits = 4)) °C")
+end
 
 
 # to reproduce results from model-current/dbhe-coaxial.jl use Euler method
 # (otherwise dont use it!!)
-sol = solve(prob, Euler(), save_everystep=false, saveat=saveat, adaptive=false, dt=1.0);
+saveat = 0:2:30
+@time sol_euler = solve(prob, Euler(), save_everystep=false, saveat=saveat, adaptive=false, dt=1.0);
+temp_euler = [adapt(CPU(),sol_euler[i])[50, 50, 80] for i in 1:length(sol_euler.t)]
 
-
-[sol[i][50, 50, 80] for i in 1:length(saveat)] # temperature at the bottom center of the domain over time
-
-
-
-# sol_oldbc = solve(prob, RDPK3SpFSAL35(), save_everystep=false, saveat=saveat, abstol=1e-1, reltol=1e-1)
+for (i, t) in enumerate(saveat)
+    println("using explicit euler: t = $(t)s, ϕ = $(round(temp_euler[i], digits = 4))°C")
+end
 
