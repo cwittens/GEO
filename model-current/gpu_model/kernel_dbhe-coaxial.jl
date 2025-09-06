@@ -141,7 +141,7 @@ yc = (ymax - ymin) / 2
 # yc = 0.5
 
 function get_grid(N, min, max)
-    return  range(min, max, length=N) 
+    return range(min, max, length=N)
 end
 
 gridx = get_grid(Nx, xmin, xmax)
@@ -260,11 +260,41 @@ end
     ) * dz_inv
 
 
-    dϕ[i,j,k] = diff - conv
+    dϕ[i, j, k] = diff - conv
 
 end
 
-function apply_boundary_conditions!(ϕ, gridz)
+@kernel function kernel_boundary_x!(ϕ, Nx)
+    j, k = @index(Global, NTuple)
+    j, k = j + 1, k + 1
+
+    # Do both x boundaries in one kernel
+    ϕ[1, j, k] = ϕ[2, j, k]        # left boundary
+    ϕ[Nx, j, k] = ϕ[Nx-1, j, k]    # right boundary
+end
+
+@kernel function kernel_boundary_y!(ϕ, Ny)
+    i, k = @index(Global, NTuple)
+    i, k = i + 1, k + 1
+
+    # Do both y boundaries in one kernel
+    ϕ[i, 1, k] = ϕ[i, 2, k]       # front boundary  
+    ϕ[i, Ny, k] = ϕ[i, Ny-1, k]   # back boundary
+end
+
+@kernel function kernel_boundary_z!(ϕ, Nz, ϕ0_val)
+    i, j = @index(Global, NTuple)
+    i, j = i + 1, j + 1
+
+    # Do both z boundaries in one kernel
+    ϕ[i, j, 1] = ϕ[i, j, 2]       # top boundary
+    ϕ[i, j, Nz] = ϕ0_val          # bottom boundary (Dirichlet)
+end
+
+
+
+
+function apply_boundary_conditions_cpu_only!(ϕ, gridz)
     ϕ[1, 2:end-1, 2:end-1] .= ϕ[2, 2:end-1, 2:end-1]
     ϕ[end, 2:end-1, 2:end-1] .= ϕ[end-1, 2:end-1, 2:end-1]
     ϕ[2:end-1, 1, 2:end-1] .= ϕ[2:end-1, 2, 2:end-1]
@@ -274,33 +304,44 @@ function apply_boundary_conditions!(ϕ, gridz)
     return nothing
 end
 
+
+
+
 function rhs!(dϕ, ϕ, cache, t)
     (; d, vx, vy, vz, gridx, gridy, gridz, Nx, Ny, Nz, xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv) = cache
 
     backend = get_backend(ϕ)
-    kernel = kernel_rhs!(backend)
+    ϕ0_val = ϕ0(gridz[end])
 
-    apply_boundary_conditions!(ϕ, gridz)
+    kernel_boundary_x!(backend)(ϕ, Nx, ndrange=(Ny - 2, Nz - 2))
+    kernel_boundary_y!(backend)(ϕ, Ny, ndrange=(Nx - 2, Nz - 2))
+    kernel_boundary_z!(backend)(ϕ, Nz, ϕ0_val, ndrange=(Nx - 2, Ny - 2))
 
-    kernel(dϕ, ϕ, d, vx, vy, vz, gridx, gridy, xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv, ndrange=(Nx-2, Ny-2, Nz-2))
+
+    kernel_rhs!(backend)(dϕ, ϕ, d, vx, vy, vz, gridx, gridy, xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv, ndrange=(Nx - 2, Ny - 2, Nz - 2))
 
     return nothing
 end
 
 dx, dy, dz = step(gridx), step(gridy), step(gridz)
-dx_inv, dy_inv, dz_inv = 1/dx, 1/dy, 1/dz
+dx_inv, dy_inv, dz_inv = 1 / dx, 1 / dy, 1 / dz
 
 cache = (; d, vx, vy, vz, gridx, gridy, gridz, Nx, Ny, Nz, xc, yc, r1, t1, r2, ε, dx_inv, dy_inv, dz_inv, dz)
 
-saveat = 0:2:30
+saveat = 0:1:30
 prob = ODEProblem(rhs!, ϕ, tspan, cache)
 
-@time sol = solve(prob, RDPK3SpFSAL35(), save_everystep=false, saveat=saveat, abstol = 1e-1, reltol = 1e-1);
+@time sol = solve(prob, RDPK3SpFSAL35(), save_everystep=false, saveat=saveat, abstol=1e-1, reltol=1e-1);
 
 
 # to reproduce results from model-current/dbhe-coaxial.jl use Euler method
 # (otherwise dont use it!!)
-sol = solve(prob, Euler(), save_everystep=false, saveat=saveat, adaptive=false, dt = 1.0);
+sol = solve(prob, Euler(), save_everystep=false, saveat=saveat, adaptive=false, dt=1.0);
 
 
-[sol[i][50,50,80] for i in 1:length(saveat)] # temperature at the bottom center of the domain over time
+[sol[i][50, 50, 80] for i in 1:length(saveat)] # temperature at the bottom center of the domain over time
+
+
+
+# sol_oldbc = solve(prob, RDPK3SpFSAL35(), save_everystep=false, saveat=saveat, abstol=1e-1, reltol=1e-1)
+
