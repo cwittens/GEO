@@ -253,8 +253,14 @@ end
 end
 
 # 3209.602894 seconds (166.23 G allocations: 2.688 TiB, 7.91% gc time, 0.01% compilation time)
+# for 100, 100, 80 and 2400s
+# On H100 it takes ~0.1s
 
+# 3097.836090 seconds (172.75 G allocations: 2.787 TiB, 19.39% gc time, 0.07% compilation time)
+# for 200, 200, 160 and 30s
+# On H100 it takes ~0.03s
 
+# Simulation results to compare results:
 # Iteration:0, time:0.0s, bottom temp:20.0°C
 # Iteration:2, time:2.0s, bottom temp:20.7681°C
 # Iteration:4, time:4.0s, bottom temp:21.4182°C
