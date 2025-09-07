@@ -3,6 +3,7 @@ Pkg.activate(@__DIR__)
 # Pkg.instantiate() # if everything works as expected, only run this and not "Pkg.add(...)"
 
 # add more packages if needed here
+# Pkg.add("WriteVTK")
 # Pkg.add("OrdinaryDiffEqLowOrderRK")
 # Pkg.add("OrdinaryDiffEqTsit5")
 # Pkg.add("OrdinaryDiffEqLowStorageRK")
@@ -14,6 +15,7 @@ Pkg.activate(@__DIR__)
 # Pkg.add("CUDA")
 # Pkg.add("AMDGPU")
 
+using WriteVTK
 using OrdinaryDiffEqLowOrderRK
 using OrdinaryDiffEqTsit5
 using OrdinaryDiffEqLowStorageRK
@@ -27,6 +29,11 @@ using AMDGPU
 
 include("helper_function.jl")
 
+
+# Create experiment folder #####################################################
+path = joinpath(@__DIR__,"results_gpu")
+rm(path, recursive=true, force=true)
+mkpath(path)
 
 
 ################################################################################
@@ -143,9 +150,9 @@ xmin, xmax = 0.0, 1.0
 ymin, ymax = 0.0, 1.0
 zmin, zmax = 0.0, h2 + 1
 
-Nx = 201
-Ny = 201
-Nz = 161
+Nx = 101
+Ny = 101
+Nz = 81
 
 # Center of the pipe
 xc = (xmax - xmin) / 2
@@ -174,10 +181,18 @@ for (i, x) in enumerate(gridx)
     end
 end
 
+V = zeros(3, Nx, Ny, Nz)
+V[1, :, :, :] .= vx
+V[2, :, :, :] .= vy  
+V[3, :, :, :] .= vz
 
 
+save(path,"velocity",V,gridx,gridy,gridz,0)
+save(path,"diff_coeff",d,gridx,gridy,gridz,0)
 
-backend = ROCBackend() # or ROCBackend() or CUDABackend() or CPU()
+# change backend depending on hardware
+backend = CPU() # or ROCBackend() or CUDABackend() or CPU()
+
 cache = create_cache(backend=backend, d=d, vx=vx, vy=vy, vz=vz, gridx=gridx, gridy=gridy, gridz=gridz, r1=r1, t1=t1, r2=r2, ε=ε)
 ϕ_adapt = adapt(backend, ϕ)
 
@@ -186,29 +201,27 @@ prob = ODEProblem(rhs!, ϕ_adapt, tspan, cache)
 
 
 
-saveat = range(tspan..., 2)
-@time sol = solve(prob, RDPK3SpFSAL35(), save_everystep=false, abstol=1e-3, reltol=1e-3);#, saveat=saveat);
+saveat = range(tspan..., 16)
+saveat = 0:2:30 # if it is not a integer, file names will be with decimal point
+callback, saved_values = save_and_print_callback(saveat, write_to_file=true)
+@time sol = solve(prob, RDPK3SpFSAL35(), save_everystep=false, abstol=1e-3, reltol=1e-3, callback=callback);
 
-# on AMD with (501, 501, 401) and tspan = (0.0, 240.0)
-# 9.940117 seconds (543.61 k allocations: 24.565 MiB)
-
-# sol_old_cpu = sol
-# sol_old_gpu = sol
-
-temp = [adapt(CPU(), sol[i])[Nx÷2, Ny÷2, Nz-1] for i in 1:length(sol.t)]
-
-for (i, t) in enumerate(sol.t)
-    println("using adaptive time integration: t = $(round(t, digits = 2)) s, ϕ = $(round(temp[i], digits = 4)) °C")
+for (i, t) in enumerate(saved_values.t)
+    temp = saved_values.saveval[i][Nx÷2, Ny÷2, Nz-1]
+    println("using adaptive time integration: t = $(round(t, digits = 2)) s, ϕ = $(round(temp, digits = 4)) °C")
 end
 
 
 # to reproduce results from model-current/dbhe-coaxial.jl use Euler method
-# (otherwise dont use it!!)
+# (otherwise dont use the Euler method it!!)
 saveat = 0:2:30
-@time sol_euler = solve(prob, Euler(), save_everystep=false, saveat=saveat, adaptive=false, dt=1.0);
-temp_euler = [adapt(CPU(), sol_euler[i])[Nx÷2, Ny÷2, Nz-1] for i in 1:length(sol_euler.t)]
-
-for (i, t) in enumerate(saveat)
-    println("using explicit euler: t = $(t)s, ϕ = $(round(temp_euler[i], digits = 4))°C")
+callback, saved_values_euler = save_and_print_callback(saveat, write_to_file=true, prepend_file="euler_")
+@time sol_euler = solve(prob, Euler(), save_everystep=false,
+callback=callback,
+adaptive=false, dt=1);
+# print results to REPL
+for (i, t) in enumerate(saved_values_euler.t)
+    temp = saved_values_euler.saveval[i][Nx÷2, Ny÷2, Nz-1]
+    println("using explicit euler: t = $(t)s, ϕ = $(round(temp, digits = 4))°C")
 end
 

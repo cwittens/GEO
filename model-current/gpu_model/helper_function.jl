@@ -5,7 +5,7 @@ function get_grid_periodic(N, min, max)
 end
 
 function get_grid(N, min, max)
-    return  range(min, max, length=N) 
+    return range(min, max, length=N)
 end
 
 
@@ -60,7 +60,7 @@ function create_cache(; backend, d, vx, vy, vz, gridx, gridy, gridz, r1, t1, r2,
 
     ϕ0_val = ϕ0(gridz[end])
 
-    idx_map_inner, idx_map_between = create_radius_index_maps(gridx, gridy, xc, yc,  r1, t1, r2)
+    idx_map_inner, idx_map_between = create_radius_index_maps(gridx, gridy, xc, yc, r1, t1, r2)
     N_inner = length(idx_map_inner)
     N_between = length(idx_map_between)
 
@@ -81,7 +81,7 @@ function create_cache(; backend, d, vx, vy, vz, gridx, gridy, gridz, r1, t1, r2,
 end
 
 
-function create_radius_index_maps(gridx, gridy, xc, yc,  r1, t1, r2)
+function create_radius_index_maps(gridx, gridy, xc, yc, r1, t1, r2)
     idx_map_inner = Tuple{Int,Int}[]
     idx_map_between = Tuple{Int,Int}[]
     for (i, x) in enumerate(gridx)
@@ -236,6 +236,58 @@ end
         + ε * vz[i, j, k] * (ϕ[i, j, k] - ϕ[i, j, k-1]) * dz_inv
     )
     dϕ[i, j, k] -= conv
+
+end
+
+
+
+# callbacks
+function save_julia_array(u, t, integrator)
+    return copy(adapt(CPU(), u))
+end
+
+function save_julia_array_and_write_to_VTK_prepend_path(u, t, integrator, prepend_file)
+    u_cpu = copy(adapt(CPU(), u))
+    gridx = integrator.p.gridx
+    gridy = integrator.p.gridy
+    gridz = integrator.p.gridz
+    file_name = prepend_file * "temperature"
+    t = isinteger(t) ? Int(t) : t # make an int if possible for nicer file names
+    save(path,file_name,u_cpu,gridx,gridy,gridz,t)
+    return u_cpu
+end
+
+function save_and_print_callback(saveat; print_every_n=100, write_to_file=false, prepend_file = "")
+    # reset counter
+    step_counter = Ref(0)
+    # Callback that increments counter and prints every 100 steps
+    function print_condition(u, t, integrator)
+        step_counter[] += 1
+        return step_counter[] % print_every_n == 0
+    end
+
+    function print_affect!(integrator)
+        println("Step $(step_counter[]), t = $(integrator.t)")
+    end
+
+    # to have a process for long simulations
+    print_cb = DiscreteCallback(print_condition, print_affect!)
+
+
+
+    saved_values = SavedValues(Float64, Array{Float64, 3})
+
+    if write_to_file
+        # closer of the other function to make it work with Callback Interface
+        save_julia_array_and_write_to_VTK(u, t, integrator) = save_julia_array_and_write_to_VTK_prepend_path(u, t, integrator, prepend_file)
+        save_cb = SavingCallback(save_julia_array_and_write_to_VTK, saved_values, saveat=saveat)
+    else
+        save_cb = SavingCallback(save_julia_array, saved_values, saveat=saveat)
+    end
+
+
+
+    return (CallbackSet(save_cb, print_cb), saved_values)
 
 end
 

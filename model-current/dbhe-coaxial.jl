@@ -15,14 +15,14 @@ include("utils.jl")
 #
 
 # Create experiment folder #####################################################
-path = "results/"
+path = joinpath(@__DIR__,"results")
 rm(path, recursive=true, force=true)
 mkpath(path)
 
 # Physical parameters ##########################################################
 
 # Maximum simulation time [s]
-sim_time = 30 # 40 minutes
+sim_time = 30 
 
 # Earth surface temperature [°C]
 ϕs = 20
@@ -193,6 +193,7 @@ save(path,"diff_coeff",d,rx,ry,rz,0)
 
 # Solve eq. system
 function updateϕ_domain!(ϕ2,ϕ1,d,vx,vy,vz,dx,dy,dz,dt,xc,yc,r1,t1,r2)
+    ε = 1.0
     @threads for k = 2:kk-1
         for j = 2:jj-1
             for i = 2:ii-1                
@@ -248,7 +249,7 @@ end
     # Save ϕ
     if t % 1 == 0
         println("Iteration:$t, time:$(round(t*dt,digits=2))s, bottom temp:$(round(ϕ2[ii÷2,jj÷2,kk-1],digits=4))°C")
-        # save(path,"temperature",ϕ2,rx,ry,rz,t)
+        save(path,"temperature",ϕ2,rx,ry,rz,t)
     end
 end
 
