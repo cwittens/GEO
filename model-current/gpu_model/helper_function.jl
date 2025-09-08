@@ -253,11 +253,11 @@ function save_julia_array_and_write_to_VTK_prepend_path(u, t, integrator, prepen
     gridz = integrator.p.gridz
     file_name = prepend_file * "temperature"
     t = isinteger(t) ? Int(t) : t # make an int if possible for nicer file names
-    save(path,file_name,u_cpu,gridx,gridy,gridz,t)
+    save(path, file_name, u_cpu, gridx, gridy, gridz, t)
     return u_cpu
 end
 
-function save_and_print_callback(saveat; print_every_n=100, write_to_file=false, prepend_file = "")
+function save_and_print_callback(saveat; print_every_n=100, write_to_file=false, prepend_file="")
     # reset counter
     step_counter = Ref(0)
     # Callback that increments counter and prints every 100 steps
@@ -275,7 +275,7 @@ function save_and_print_callback(saveat; print_every_n=100, write_to_file=false,
 
 
 
-    saved_values = SavedValues(Float64, Array{Float64, 3})
+    saved_values = SavedValues(Float64, Array{Float64,3})
 
     if write_to_file
         # closer of the other function to make it work with Callback Interface
@@ -290,4 +290,6 @@ function save_and_print_callback(saveat; print_every_n=100, write_to_file=false,
     return (CallbackSet(save_cb, print_cb), saved_values)
 
 end
+
+
 

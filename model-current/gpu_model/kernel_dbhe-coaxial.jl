@@ -31,7 +31,7 @@ include("helper_function.jl")
 
 
 # Create experiment folder #####################################################
-path = joinpath(@__DIR__,"results_gpu")
+path = joinpath(@__DIR__, "results_gpu")
 rm(path, recursive=true, force=true)
 mkpath(path)
 
@@ -183,12 +183,12 @@ end
 
 V = zeros(3, Nx, Ny, Nz)
 V[1, :, :, :] .= vx
-V[2, :, :, :] .= vy  
+V[2, :, :, :] .= vy
 V[3, :, :, :] .= vz
 
 
-save(path,"velocity",V,gridx,gridy,gridz,0)
-save(path,"diff_coeff",d,gridx,gridy,gridz,0)
+save(path, "velocity", V, gridx, gridy, gridz, 0)
+save(path, "diff_coeff", d, gridx, gridy, gridz, 0)
 
 # change backend depending on hardware
 backend = CPU() # or ROCBackend() or CUDABackend() or CPU()
@@ -196,7 +196,7 @@ backend = CPU() # or ROCBackend() or CUDABackend() or CPU()
 cache = create_cache(backend=backend, d=d, vx=vx, vy=vy, vz=vz, gridx=gridx, gridy=gridy, gridz=gridz, r1=r1, t1=t1, r2=r2, ε=ε)
 ϕ_adapt = adapt(backend, ϕ)
 
-tspan = (0.0, 30.0)
+tspan = (0.0, 2400.0)
 prob = ODEProblem(rhs!, ϕ_adapt, tspan, cache)
 
 
@@ -204,7 +204,7 @@ prob = ODEProblem(rhs!, ϕ_adapt, tspan, cache)
 saveat = range(tspan..., 16)
 saveat = 0:2:30 # if it is not a integer, file names will be with decimal point
 callback, saved_values = save_and_print_callback(saveat, write_to_file=true)
-@time sol = solve(prob, RDPK3SpFSAL35(), save_everystep=false, abstol=1e-3, reltol=1e-3, callback=callback);
+@time sol = solve(prob, Tsit5(), save_everystep=false, abstol=1e-3, reltol=1e-3, callback=callback);
 
 for (i, t) in enumerate(saved_values.t)
     temp = saved_values.saveval[i][Nx÷2, Ny÷2, Nz-1]
@@ -216,9 +216,8 @@ end
 # (otherwise dont use the Euler method it!!)
 saveat = 0:2:30
 callback, saved_values_euler = save_and_print_callback(saveat, write_to_file=true, prepend_file="euler_")
-@time sol_euler = solve(prob, Euler(), save_everystep=false,
-callback=callback,
-adaptive=false, dt=1);
+@time sol_euler = solve(prob, Euler(), save_everystep=false, dt=1, callback=callback);
+
 # print results to REPL
 for (i, t) in enumerate(saved_values_euler.t)
     temp = saved_values_euler.saveval[i][Nx÷2, Ny÷2, Nz-1]
