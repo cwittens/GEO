@@ -1,5 +1,5 @@
 
-function set_up_physic()
+function set_up_physics()
     # Physical parameters ##########################################################
 
 
