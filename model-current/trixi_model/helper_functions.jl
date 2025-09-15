@@ -65,6 +65,11 @@ function set_up_physics()
     # Reynolds number
     Re = ρf * uf * Lf / μf
 
-    return (; ϕs, ρr, cr, λr, dr, ϕ0, r1, t1, h1, r2, t2, h2, ε,
+
+    # bore hole center
+    xc = 0.5
+    yc = 0.5
+
+    return (; ϕs, ρr, cr, λr, dr, ϕ0, r1, t1, h1, r2, t2, h2, ε, xc, yc,
         ρp, cp, λp, dp, ρf, cf, λf, df, uf, vx0, vy0, vz0, Lf, μf, Re)
 end

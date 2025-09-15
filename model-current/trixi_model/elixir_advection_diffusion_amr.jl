@@ -4,7 +4,7 @@ using Trixi
 ###############################################################################
 # semidiscretization of the linear advection equation
 
-advection_velocity = (1.2, -0.7, 0.5)
+advection_velocity = (1.2, 0.7, 3.5)
 equations = LinearScalarAdvectionEquation3D(advection_velocity)
 
 diffusivity() = 5.0e-2
