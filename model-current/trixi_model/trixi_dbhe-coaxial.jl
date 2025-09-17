@@ -94,6 +94,9 @@ coordinates_min = (0.0, 0.0, 0.0) # minimum coordinates (min(x), min(y), min(z))
 coordinates_max = (10.0, 10.0, 10.0) # maximum coordinates (max(x), max(y), max(z))
 
 
+region_min0 = (0.0, 0.0, 0.0)
+region_max0 = (2.0, 2.0, 10.0)
+
 region_min1 = (0.0, 0.0, 0.0)
 region_max1 = (1.0, 1.0, 10.0)
 
@@ -104,13 +107,17 @@ region_max2 = (0.8, 0.8, 10.0)
 refinement_patches = (
     # First refinement patch 
     (type="box",
-        coordinates_min=region_min1,
-        coordinates_max=region_max1),
+        coordinates_min=region_min0,
+        coordinates_max=region_max0),
 
     # Second refinement patch - even finer 
     (type="box",
-        coordinates_min=region_min2,
-        coordinates_max=region_max2),
+        coordinates_min=region_min1,
+        coordinates_max=region_max1),
+
+        (type="box",
+        coordinates_min=region_min1,
+        coordinates_max=region_max1),
 
     # Third refinement patch - even finer
     (type="box",
@@ -171,22 +178,29 @@ semi = SemidiscretizationHyperbolicParabolic(mesh,
     solver;
     solver_parabolic=ViscousFormulationBassiRebay1(),
     boundary_conditions=(boundary_conditions_hyperbolic, boundary_conditions_parabolic))
+# Create a dummy solution (at t=0)
+ode = semidiscretize(semi, (0.0, 0.0))
+u0 = ode.u0
 
-tspan = (0.0, 30.0)
+# Create plot data and visualize the mesh
+pd = PlotData2D(u0, semi)
+plot(getmesh(pd), xlims=(0.0, 1.0), ylims=(0.0, 1.0))
+
+
+tspan = (0.0, 20.0)
 ode = semidiscretize(semi, tspan)
-callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval=100))
+callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval=10))
 time_int_tol = 1.0e-3
 
-saveat = range(tspan..., 16)
+saveat = range(tspan..., 11)
 sol = solve(ode, RDPK3SpFSAL49(); abstol=time_int_tol, reltol=time_int_tol,
 saveat=saveat,
     callback=callbacks);
 
 begin
-    pd = PlotData2D(sol.u[end], semi, slice=:xy, point=(0.0, 0.0, 0.0))
-    p = plot(pd["phi"])
-    plot!(getmesh(pd))
+    pd = PlotData2D(sol.u[end], semi, slice=:xy, point=(0.0, 0.0, 9))
+    p = plot(pd["ε*vz"],)# clims=(20.0, 25.0))
+    # plot!(getmesh(pd))
     plot!(p, xlims=(0.0, 1.0), ylims=(0.0, 1.0))
 end
-
 
