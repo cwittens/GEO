@@ -1,5 +1,5 @@
 # load internal functions and structs we need
-using Trixi: AbstractEquationsParabolic, BoundaryConditionDirichlet, BoundaryConditionConstantNeumann, Gradient, Divergence 
+using Trixi: AbstractEquationsParabolic, BoundaryConditionDirichlet, BoundaryConditionNeumann, Gradient, Divergence 
 
 #  load internal functions and structs we need to modify / add functionality
 import Trixi: varnames, flux

@@ -41,11 +41,26 @@ solver = DGSEM(polydeg=3, surface_flux=surface_flux,
 coordinates_min = (-1.0, -0.5, -0.5) # minimum coordinates (min(x), min(y), min(z))
 coordinates_max = (0.0, 0.5, 0.5) # maximum coordinates (max(x), max(y), max(z))
 
-# Create a uniformly refined mesh with periodic boundaries
+
+
+# Define areas where you want finer mesh
+refinement_patches = (
+    # First refinement patch - a box around x ∈ [-0.8, -0.2], y ∈ [-0.3, 0.3], z ∈ [-0.3, 0.3]
+    (type="box",
+        coordinates_min=(-0.6, -0.1, -0.1),
+        coordinates_max=(-0.4, 0.1, 0.1)),
+
+    # Second refinement patch - even finer around the inlet area
+    (type="box",
+        coordinates_min=(-0.6, -0.1, -0.1),
+        coordinates_max=(-0.4, 0.1, 0.1)),
+)
+# Create mesh with refinement patches
 mesh = TreeMesh(coordinates_min, coordinates_max,
     initial_refinement_level=3,
+    refinement_patches=refinement_patches,  # Add this parameter
     periodicity=false,
-    n_cells_max=80_000) # set maximum capacity of tree data structure
+    n_cells_max=80_000)
 
 boundary_conditions_hyperbolic = (;
     x_neg=boundary_condition_do_nothing,
@@ -59,23 +74,23 @@ boundary_conditions_parabolic = BoundaryConditionDirichlet(initial_condition)
 boundary_conditions_parabolic = BoundaryConditionNeumann((x, t, equations) -> SVector(0.0))
 
 semi = SemidiscretizationHyperbolicParabolic(mesh,
-                                             (equations_hyperbolic, equations_parabolic),
-                                             initial_condition, solver;
-                                             solver_parabolic = ViscousFormulationBassiRebay1(),
-                                             boundary_conditions = (boundary_conditions_hyperbolic,
-                                                                    boundary_conditions_parabolic))
+    (equations_hyperbolic, equations_parabolic),
+    initial_condition, solver;
+    solver_parabolic=ViscousFormulationBassiRebay1(),
+    boundary_conditions=(boundary_conditions_hyperbolic,
+        boundary_conditions_parabolic))
 # Create ODE problem with time span `tspan`
 tspan = (0.0, 0.1)
 ode = semidiscretize(semi, tspan)
 
-callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval = 100))
+callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval=100))
 
 # OrdinaryDiffEq's `solve` method evolves the solution in time and executes the passed callbacks
 time_int_tol = 1.0e-7
-sol = solve(ode, RDPK3SpFSAL49(); abstol = time_int_tol, reltol = time_int_tol,
-            ode_default_options()..., callback = callbacks)
+sol = solve(ode, RDPK3SpFSAL49(); abstol=time_int_tol, reltol=time_int_tol,
+    ode_default_options()..., callback=callbacks)
 begin
-    pd = PlotData2D(sol)
+    pd = PlotData2D(sol, slice=:xy, point=(0.0, 0.0, 0.0))
     plot(pd["phi"], clims=(0.0, 1.0))
-    # plot!(getmesh(pd))
+    plot!(getmesh(pd))
 end
