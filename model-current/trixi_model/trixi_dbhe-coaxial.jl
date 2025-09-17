@@ -8,9 +8,6 @@ Pkg.activate(@__DIR__)
 # Pkg.add("Plots")
 
 using Trixi
-using Trixi: AbstractEquations, get_node_vars, AbstractEquationsParabolic, @threaded
-import Trixi: varnames, default_analysis_integrals, flux, max_abs_speed_naive,
-    have_nonconservative_terms
 
 using OrdinaryDiffEqTsit5
 using OrdinaryDiffEqLowStorageRK
@@ -34,116 +31,12 @@ println("Julia has access to $(Threads.nthreads()) threads")
 all_physical_parameters = set_up_physics()
 
 
-begin # define a new equation type for the nonconservative linear advection equation
-#! format: noindent
-
-# Since there is no native support for variable coefficients, we use more
-# variables: one for the basic unknowns `ϕ` and another three for the coefficient `ε*v's`
-# and one for the diffusion coefficient `d = λ/(ρ c)`  with 3 dimensions, 5 variables (ϕ, εvx, εvy, εvz, d)
-struct DiffusionConvectionHyperbolic3D <: AbstractEquations{3,5} end
-
-
-function varnames(::typeof(cons2cons), ::DiffusionConvectionHyperbolic3D)
-    ("phi", "ε*vx", "ε*vy", "ε*vz", "d")
-end
-
-
-default_analysis_integrals(::DiffusionConvectionHyperbolic3D) = ()
-
-# The conservative part of the flux is zero
-flux(u, orientation, equation::DiffusionConvectionHyperbolic3D) = zero(u)
-
-# Calculate maximum wave speed for local Lax-Friedrichs-type dissipation
-function max_abs_speed_naive(u_ll, u_rr, orientation::Integer,
-    ::DiffusionConvectionHyperbolic3D)
-    # Extract velocity components from left and right states
-    _, vx_ll, vy_ll, vz_ll, _ = u_ll
-    _, vx_rr, vy_rr, vz_rr, _ = u_rr
-
-    # Select velocity component based on orientation
-    if orientation == 1
-        v_ll = vx_ll
-        v_rr = vx_rr
-    elseif orientation == 2
-        v_ll = vy_ll
-        v_rr = vy_rr
-    else  # orientation == 3
-        v_ll = vz_ll
-        v_rr = vz_rr
-    end
-
-    return max(abs(v_ll), abs(v_rr))
-end
-
-
-# We use nonconservative terms
-have_nonconservative_terms(::DiffusionConvectionHyperbolic3D) = Trixi.True()
-
-
-# This "nonconservative numerical flux" implements the nonconservative terms for 3D
-# The nonconservative term is: (ε vx ∂ϕ/∂x + ε vy ∂ϕ/∂y + ε vz ∂ϕ/∂z)
-# In general, nonconservative terms can be written in the form
-#   g(u) ∂ₓ h(u)
-# Thus, a discrete difference approximation of this nonconservative term needs
-# - `u mine`:  the value of `u` at the current position (for g(u))
-# - `u_other`: the values of `u` in a neighborhood of the current position (for ∂ₓ h(u))
-function flux_nonconservative(u_mine, u_other, orientation,
-    equations::DiffusionConvectionHyperbolic3D)
-    # Extract variables from u_mine (gives velocity components at current position)
-    # TODO: check if unpacking in the if else is faster
-    _, vx_mine, vy_mine, vz_mine, _ = u_mine
-
-    # Extract variables from u_other (gives phi value at neighboring position for gradient)
-    phi_other, _, _, _, _ = u_other
-
-    # Select the appropriate velocity component based on spatial orientation
-    if orientation == 1        # x-direction
-        v_component = vx_mine
-    elseif orientation == 2    # y-direction  
-        v_component = vy_mine
-    else  # orientation == 3   # z-direction
-        v_component = vz_mine
-    end
-
-    # Return contributions to each equation
-    return SVector(v_component * phi_other,  # contribution to ϕ equation
-        zero(phi_other),           # no contribution to vx equation (auxiliary)
-        zero(phi_other),           # no contribution to vy equation (auxiliary)
-        zero(phi_other),           # no contribution to vz equation (auxiliary)
-        zero(phi_other))           # no contribution to d equation (auxiliary)
-end
-end #end begin block
 
 # begin # define a new equation type for the diffusion equation
 #! format: noindent
 
 
-# Since there is no native support for variable coefficients, we use more
-# variables: one for the basic unknowns `ϕ` and another three for the coefficient `ε*v's`
-# and one for the diffusion coefficient `d = λ/(ρ c)`
-struct DiffusionConvectionParabolic3D{E} <: AbstractEquationsParabolic{3,5,GradientVariablesConservative}
-    equations_hyperbolic::E
-end
 
-function varnames(variable_mapping, equations_parabolic::DiffusionConvectionParabolic3D)
-    varnames(variable_mapping, equations_parabolic.equations_hyperbolic)
-end
-
-
-function flux(u, gradients, orientation::Integer,
-    equations_parabolic::DiffusionConvectionParabolic3D)
-    _, _, _, _, diffusivity = u
-    null = zero(diffusivity)
-
-    dudx, dudy, dudz = gradients
-    if orientation == 1
-        return SVector(diffusivity * dudx[1], null, null, null, null)
-    elseif orientation == 2
-        return SVector(diffusivity * dudy[1], null, null, null, null)
-    else
-        return SVector(diffusivity * dudz[1], null, null, null, null)
-    end
-end
 
 # only needed for P4estMesh
 # TODO: this is most likely wrong. need to think what do to here
@@ -197,29 +90,29 @@ boundary_conditions_hyperbolic = boundary_condition_periodic
 boundary_conditions_parabolic = boundary_condition_periodic
 
 # as in https://trixi-framework.github.io/TrixiDocumentation/dev/tutorials/adding_new_parabolic_terms/#Defining-boundary-conditions 
-struct BoundaryConditionConstantDirichlet{T<:AbstractVector{<:Real}}
-    boundary_values::T
-end
+# struct BoundaryConditionConstantDirichlet{T<:AbstractVector{<:Real}}
+#     boundary_values::T
+# end
 
-@inline function (boundary_condition::BoundaryConditionConstantDirichlet)(flux_inner,
-    u_inner,
-    normal::AbstractVector,
-    x, t,
-    operator_type::Trixi.Gradient,
-    equations_parabolic::DiffusionConvectionParabolic3D)
-    return boundary_condition.boundary_values
-end
+# @inline function (boundary_condition::BoundaryConditionConstantDirichlet)(flux_inner,
+#     u_inner,
+#     normal::AbstractVector,
+#     x, t,
+#     operator_type::Trixi.Gradient,
+#     equations_parabolic::DiffusionConvectionParabolic3D)
+#     return boundary_condition.boundary_values
+# end
 
 
 
-@inline function (boundary_condition::BoundaryConditionConstantDirichlet)(flux_inner,
-    u_inner,
-    normal::AbstractVector,
-    x, t,
-    operator_type::Trixi.Divergence,
-    equations_parabolic::DiffusionConvectionParabolic3D)
-    return flux_inner
-end
+# @inline function (boundary_condition::BoundaryConditionConstantDirichlet)(flux_inner,
+#     u_inner,
+#     normal::AbstractVector,
+#     x, t,
+#     operator_type::Trixi.Divergence,
+#     equations_parabolic::DiffusionConvectionParabolic3D)
+#     return flux_inner
+# end
 
 
 
@@ -344,6 +237,15 @@ boundary_conditions_dirichlet = (;
 
 boundary_conditions_parabolic = boundary_condition_periodic
 boundary_conditions_hyperbolic = boundary_conditions_dirichlet
+
+boundary_conditions = (; x_neg = BoundaryConditionDirichlet(initial_condition),
+                       y_neg = BoundaryConditionDirichlet(initial_condition),
+                       z_neg = boundary_condition_do_nothing,
+                       y_pos = BoundaryConditionDirichlet(initial_condition),
+                       x_pos = boundary_condition_do_nothing,
+                       z_pos = boundary_condition_do_nothing)
+
+boundary_conditions_parabolic = BoundaryConditionDirichlet(initial_condition)
 
 
 # Create a DGSEM solver with polynomials of degree `polydeg`
