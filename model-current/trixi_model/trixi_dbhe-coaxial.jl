@@ -13,7 +13,10 @@ using OrdinaryDiffEqTsit5
 using OrdinaryDiffEqLowStorageRK
 using Plots
 
+include(joinpath(@__DIR__, "diffusion_stuff.jl"))
+include(joinpath(@__DIR__, "linear_advection_stuff.jl"))
 include(joinpath(@__DIR__, "helper_functions.jl"))
+
 using Base.Threads
 println("Julia has access to $(Threads.nthreads()) threads")
 
@@ -30,30 +33,47 @@ println("Julia has access to $(Threads.nthreads()) threads")
 
 all_physical_parameters = set_up_physics()
 
+function initial_condition_borehole_params(x, t, equation, all_physical_parameters)
+    (; r1, t1, r2, t2, ϕ0, df, uf, ϕs, dp, xc, yc, dr) = all_physical_parameters
+    r = sqrt((x[1] - xc)^2 + (x[2] - yc)^2)
+    if r < r1 # inside inner pipe
+        d_val = df
+        vx_val = 0
+        vy_val = 0
+        vz_val = -uf
+        ϕ_val = ϕs
+    elseif r < r1 + t1 # inner pipe
+        d_val = dp
+        vx_val = 0
+        vy_val = 0
+        vz_val = 0
+        ϕ_val = ϕs
+    elseif r < r2 # between inner and outer pipe
+        d_val = df
+        vx_val = 0
+        vy_val = 0
+        vz_val = uf
+        ϕ_val = ϕs
+    elseif r < r2 + t2 # outer pipe
+        d_val = dp
+        vx_val = 0
+        vy_val = 0
+        vz_val = 0
+        ϕ_val = ϕs
+    else # rock
+        d_val = dr
+        vx_val = 0
+        vy_val = 0
+        vz_val = 0
+        ϕ_val = ϕ0(x[3])
+    end
 
+    SVector(ϕ_val, vx_val, vy_val, vz_val, d_val)
+end
 
-# begin # define a new equation type for the diffusion equation
-#! format: noindent
+initial_condition_borehole(x, t, equation) = initial_condition_borehole_params(x, t, equation, all_physical_parameters)
 
-
-
-
-# only needed for P4estMesh
-# TODO: this is most likely wrong. need to think what do to here
-# Calculate maximum wave speed for local Lax-Friedrichs-type dissipation
-# function max_abs_speed_naive(u_ll, u_rr, normal_direction::AbstractVector,
-#     ::Union{DiffusionConvectionHyperbolic3D, DiffusionConvectionParabolic3D})
-#     # Extract velocity components from left and right states
-#     _, vx_ll, vy_ll, vz_ll, _ = u_ll
-#     _, vx_rr, vy_rr, vz_rr, _ = u_rr
-
-#     # Project velocities onto normal direction
-#     v_normal_ll = vx_ll * normal_direction[1] + vy_ll * normal_direction[2] + vz_ll * normal_direction[3]
-#     v_normal_rr = vx_rr * normal_direction[1] + vy_rr * normal_direction[2] + vz_rr * normal_direction[3]
-
-#     return max(abs(v_normal_ll), abs(v_normal_rr))
-# end
-
+initial_condition = initial_condition_borehole
 
 
 
@@ -65,187 +85,53 @@ equations_parabolic = DiffusionConvectionParabolic3D(equations_hyperbolic)
 
 
 
-function initial_condition_test_open2(x, t, equation, all_physical_parameters)
-    (; ε) = all_physical_parameters
-    x_trans = x
-    vx = 1.2
-    vy = 0.7
-    vz = 0.0
-    nu = 5.0e-2
-    c = 1.0
-    A = 0.5
-    L = 2
-    f = 1 / L
-    omega = 2 * pi * f
-    phi = c + A * exp(-2 * sum(abs2, x_trans))
-
-    return SVector(phi, vx, vy, vz, nu)
-end
-
-initial_condition_test2(x, t, equations) = initial_condition_test_open2(x, t, equations, all_physical_parameters)
-
-
-# define periodic boundary conditions everywhere
-boundary_conditions_hyperbolic = boundary_condition_periodic
-boundary_conditions_parabolic = boundary_condition_periodic
-
-# as in https://trixi-framework.github.io/TrixiDocumentation/dev/tutorials/adding_new_parabolic_terms/#Defining-boundary-conditions 
-# struct BoundaryConditionConstantDirichlet{T<:AbstractVector{<:Real}}
-#     boundary_values::T
-# end
-
-# @inline function (boundary_condition::BoundaryConditionConstantDirichlet)(flux_inner,
-#     u_inner,
-#     normal::AbstractVector,
-#     x, t,
-#     operator_type::Trixi.Gradient,
-#     equations_parabolic::DiffusionConvectionParabolic3D)
-#     return boundary_condition.boundary_values
-# end
-
-
-
-# @inline function (boundary_condition::BoundaryConditionConstantDirichlet)(flux_inner,
-#     u_inner,
-#     normal::AbstractVector,
-#     x, t,
-#     operator_type::Trixi.Divergence,
-#     equations_parabolic::DiffusionConvectionParabolic3D)
-#     return flux_inner
-# end
-
-
-
-# struct BoundaryConditionConstantNeumann{T<:Real}
-#     flux_value::T
-# end
-
-# @inline function (bc::BoundaryConditionConstantNeumann)(flux_inner, u_inner, normal, x, t,
-#     operator_type::Trixi.Gradient,
-#     equations_parabolic::DiffusionConvectionParabolic3D)
-#     # Don't constrain solution value for gradient computation
-#     return flux_inner
-# end
-
-# @inline function (bc::BoundaryConditionConstantNeumann)(flux_inner, u_inner, normal, x, t,
-#     operator_type::Trixi.Divergence,
-#     equations_parabolic::DiffusionConvectionParabolic3D)
-#     # Prescribe the normal flux
-#     return SVector(bc.flux_value, zero(bc.flux_value), zero(bc.flux_value),  zero(bc.flux_value), zero(bc.flux_value))
-# end
-
-neumann_bc = BoundaryConditionConstantNeumann(0.0)
-
-struct BoundaryConditionDoNothingCustom end
-
-# Custom do-nothing BC for your 5-variable system
-function boundary_condition_do_nothing_custom(u_inner, orientation, direction, x, t,
-    surface_flux_functions,
-    equations::DiffusionConvectionHyperbolic3D)
-    # Unpack the tuple of flux functions
-    surface_flux_function, nonconservative_flux_function = surface_flux_functions
-
-    # Return both conservative and nonconservative flux contributions
-    return surface_flux_function(u_inner, u_inner, orientation, equations),
-    nonconservative_flux_function(u_inner, u_inner, orientation, equations)
-end
-
-
-zend = 10
+zend = 0
 T_zend = all_physical_parameters.ϕ0(zend)
 
-bccd = BoundaryConditionConstantDirichlet(SVector(1.0, 1.2, 0.7, 0.0, 0.05))
-#  neuman BC for the rest of the parabolic part...
-boundary_conditions_hyperbolic = (;
-    x_neg=bccd,
-    y_neg=bccd,
-    z_neg=bccd,
-    y_pos=bccd,
-    x_pos=bccd,
-    z_pos=bccd,)
-# z_pos=BoundaryConditionConstantDirichlet(T_zend))
-
-boundary_conditions_hyperbolic = (;
-    x_neg=bccd,
-    y_neg=bccd,
-    z_neg=bccd,
-    y_pos=bccd,
-    x_pos=bccd,
-    z_pos=bccd,)
-#                                 z_pos = BoundaryConditionDirichlet((x, t, equations) -> SVector(1.0)),)
-# Simple boundary function that returns the right type
-function boundary_values_test(x, t, equations::DiffusionConvectionHyperbolic3D)
-    return SVector(1.0, 1.2, 0.7, 0.0, 0.05)  # Same values as your struct
-end
-
-# Use Trixi's built-in Dirichlet BC
-boundary_conditions_hyperbolic = (;
-    x_neg=BoundaryConditionDirichlet(boundary_values_test),
-    y_neg=BoundaryConditionDirichlet(boundary_values_test),
-    z_neg=BoundaryConditionDirichlet(boundary_values_test),
-    y_pos=BoundaryConditionDirichlet(boundary_values_test),
-    x_pos=BoundaryConditionDirichlet(boundary_values_test),
-    z_pos=BoundaryConditionDirichlet(boundary_values_test),)
+# domain needs to be a cube for TreeMesh
+# TODO: change to non-dimensional coordinates to account for different lengths in x,y,z direction
+coordinates_min = (0.0, 0.0, 0.0) # minimum coordinates (min(x), min(y), min(z))
+coordinates_max = (10.0, 10.0, 10.0) # maximum coordinates (max(x), max(y), max(z))
 
 
-# This version can be called by hyperbolic solvers on logically Cartesian meshes
-@inline function (::Trixi.BoundaryConditionDoNothing)(u_inner,
-    orientation_or_normal_direction,
-    direction::Integer, x, t,
-    surface_flux_functions::Tuple,
-    equations)
-
-    surface_flux_function, nonconservative_flux_function = surface_flux_functions
-    a = surface_flux_function(u_inner, u_inner,
-        orientation_or_normal_direction, equations)
-    b = nonconservative_flux_function(u_inner, u_inner,
-        orientation_or_normal_direction, equations)
-    # @show a b
-
-    return a[1], b[1]
-
-end
+region_min1 = (0.0, 0.0, 0.0)
+region_max1 = (1.0, 1.0, 10.0)
 
 
-boundary_conditions_hyperbolic = (;
-    x_neg=boundary_condition_do_nothing,
-    y_neg=boundary_condition_do_nothing,
-    z_neg=boundary_condition_do_nothing,
-    y_pos=boundary_condition_do_nothing,
-    x_pos=boundary_condition_do_nothing,
-    z_pos=boundary_condition_do_nothing,
-)
+region_min2 = (0.2, 0.2, 0.0)
+region_max2 = (0.8, 0.8, 10.0)
 
-# Simple boundary function that returns the right type for both hyperbolic and parabolic parts
-function boundary_values_dirichlet(x, t, equations)
-    # This function should return the full 5-variable state vector at the boundary
-    return SVector(1.0, 1.2, 0.7, 0.0, 0.05)
-end
+refinement_patches = (
+    # First refinement patch 
+    (type="box",
+        coordinates_min=region_min1,
+        coordinates_max=region_max1),
 
+    # Second refinement patch - even finer 
+    (type="box",
+        coordinates_min=region_min2,
+        coordinates_max=region_max2),
 
+    # Third refinement patch - even finer
+    (type="box",
+        coordinates_min=region_min2,
+        coordinates_max=region_max2),
+    #
+    # (type="box",
+    #     coordinates_min=region_min2,
+    #     coordinates_max=region_max2),
 
-# Also use the built-in Dirichlet BC for the parabolic part
-boundary_conditions_dirichlet = (;
-    x_neg=BoundaryConditionDirichlet(boundary_values_dirichlet),
-    y_neg=BoundaryConditionDirichlet(boundary_values_dirichlet),
-    z_neg=BoundaryConditionDirichlet(boundary_values_dirichlet),
-    y_pos=BoundaryConditionDirichlet(boundary_values_dirichlet),
-    x_pos=BoundaryConditionDirichlet(boundary_values_dirichlet),
-    z_pos=BoundaryConditionDirichlet(boundary_values_dirichlet),
-)
+    #
+    (type="box",
+        coordinates_min=region_min2,
+        coordinates_max=region_max2),)
 
+mesh = TreeMesh(coordinates_min, coordinates_max,
+    initial_refinement_level=3,
+    refinement_patches=refinement_patches,
+    n_cells_max=1000000,
+    periodicity=false)
 
-boundary_conditions_parabolic = boundary_condition_periodic
-boundary_conditions_hyperbolic = boundary_conditions_dirichlet
-
-boundary_conditions = (; x_neg = BoundaryConditionDirichlet(initial_condition),
-                       y_neg = BoundaryConditionDirichlet(initial_condition),
-                       z_neg = boundary_condition_do_nothing,
-                       y_pos = BoundaryConditionDirichlet(initial_condition),
-                       x_pos = boundary_condition_do_nothing,
-                       z_pos = boundary_condition_do_nothing)
-
-boundary_conditions_parabolic = BoundaryConditionDirichlet(initial_condition)
 
 
 # Create a DGSEM solver with polynomials of degree `polydeg`
@@ -257,112 +143,50 @@ solver = DGSEM(polydeg=3, surface_flux=surface_flux,
     volume_integral=VolumeIntegralFluxDifferencing(volume_flux))
 
 
-coordinates_min = (-5.0, -5.0, -5.0) # minimum coordinates (min(x), min(y), min(z))
-coordinates_max = (5.0, 5.0, 5.0) # maximum coordinates (max(x), max(y), max(z))
 
-mesh = TreeMesh(coordinates_min, coordinates_max,
-    initial_refinement_level=3,
-    n_cells_max=80_000,
-    periodicity=false)
+boundary_conditions_hyperbolic = (;
+    x_neg=boundary_condition_do_nothing,
+    y_neg=boundary_condition_do_nothing,
+    z_neg=boundary_condition_do_nothing,
+    y_pos=boundary_condition_do_nothing,
+    x_pos=boundary_condition_do_nothing,
+    z_pos=BoundaryConditionDirichlet(initial_condition)
+)
+
+bc_neumann = BoundaryConditionNeumann((x, t, equations) -> SVector(0.0))
+boundary_conditions_parabolic = (;
+    x_neg=bc_neumann,
+    y_neg=bc_neumann,
+    z_neg=bc_neumann,
+    y_pos=bc_neumann,
+    x_pos=bc_neumann,
+    z_pos=BoundaryConditionDirichlet(initial_condition)
+)
+
+
 
 semi = SemidiscretizationHyperbolicParabolic(mesh,
     (equations_hyperbolic, equations_parabolic),
-    initial_condition_test2,
+    initial_condition,
     solver;
-    # solver_parabolic=ViscousFormulationBassiRebay1(),
+    solver_parabolic=ViscousFormulationBassiRebay1(),
     boundary_conditions=(boundary_conditions_hyperbolic, boundary_conditions_parabolic))
 
-tspan = (0.0, 3.5)
+tspan = (0.0, 30.0)
 ode = semidiscretize(semi, tspan)
 callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval=100))
-time_int_tol = 1.0e-4
+time_int_tol = 1.0e-3
 
-sol = solve(ode, Tsit5(); abstol=time_int_tol, reltol=time_int_tol, dt = 0.1,
+saveat = range(tspan..., 16)
+sol = solve(ode, RDPK3SpFSAL49(); abstol=time_int_tol, reltol=time_int_tol,
+saveat=saveat,
     callback=callbacks);
 
 begin
-    pd = PlotData2D(sol.u[end], semi)
-    plot(pd["phi"])
+    pd = PlotData2D(sol.u[end], semi, slice=:xy, point=(0.0, 0.0, 0.0))
+    p = plot(pd["phi"])
     plot!(getmesh(pd))
+    plot!(p, xlims=(0.0, 1.0), ylims=(0.0, 1.0))
 end
-
-
-
-
-
-
-
-
-
-
-
-# begin
-#     # Create a simple simulation setup to check everything works so far
-
-
-#     equation = NonconservativeLinearAdvectionEquation3D()
-
-#     function initial_condition_test_open(x, t, equation::NonconservativeLinearAdvectionEquation3D, all_physical_parameters)
-#         #@show x
-#         (; ε) = all_physical_parameters
-#         phi = sin(x[2])
-#         advection_velocity_x = ε
-#         SVector(phi, 0.0, advection_velocity_x, 0.0, 0.0)  # Assuming advection in x-direction only
-#     end
-
-
-#     initial_condition_test(x, t, equation::NonconservativeLinearAdvectionEquation3D) = initial_condition_test_open(x, t, equation::NonconservativeLinearAdvectionEquation3D, all_physical_parameters)
-
-
-#     coordinates_min = (0.0, 0.0, 0.0)
-#     coordinates_max = (2π, 2π, 2π)
-
-#     mesh = TreeMesh(coordinates_min, coordinates_max,
-#         initial_refinement_level=3,
-#         n_cells_max=30_000)
-
-
-#     # Create a DGSEM solver with polynomials of degree `polydeg`
-#     # Remember to pass a tuple of the form `(conservative_flux, nonconservative_flux)`
-#     # as `surface_flux` and `volume_flux` when working with nonconservative terms
-#     volume_flux = (flux_central, flux_nonconservative)
-#     surface_flux = (flux_lax_friedrichs, flux_nonconservative)
-#     solver = DGSEM(polydeg=3, surface_flux=surface_flux,
-#         volume_integral=VolumeIntegralFluxDifferencing(volume_flux))
-
-#     # Setup the spatial semidiscretization containing all ingredients
-#     semi = SemidiscretizationHyperbolic(mesh, equation, initial_condition_test, solver)
-
-#     # Create an ODE problem with given time span
-#     tspan = (0.0, 2.1)
-#     ode = semidiscretize(semi, tspan)
-
-
-
-#     # Set up some standard callbacks summarizing the simulation setup and computing
-#     # errors of the numerical solution
-#     summary_callback = SummaryCallback()
-#     analysis_callback = AnalysisCallback(semi, interval=50)
-#     callbacks = CallbackSet(summary_callback, analysis_callback)
-
-#     # OrdinaryDiffEq's `solve` method evolves the solution in time and executes
-#     # the passed callbacks
-#     sol = solve(ode, Tsit5(), abstol=1.0e-6, reltol=1.0e-6;
-#         ode_default_options()..., callback=callbacks)
-
-
-#     # Plot the numerical solution at the final time
-#     pd = PlotData2D(sol)#,  slice=:y)
-#     plot(pd["phi"])
-#     plot!(getmesh(pd))
-
-#     pd = PlotData1D(sol, slice=:y)
-#     plot(pd["phi"])
-#     plot!(getmesh(pd))
-
-# end
-
-
-
 
 

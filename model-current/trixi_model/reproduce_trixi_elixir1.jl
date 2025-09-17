@@ -11,12 +11,11 @@ include(joinpath(@__DIR__, "diffusion_stuff.jl"))
 include(joinpath(@__DIR__, "linear_advection_stuff.jl"))
 
 
-diffusivity() = 5.0e-2
 function initial_condition_eriksson_johnson(x, t, equations)
     vx = 1.0
     vy = 0.0
     vz = 0.0
-    d = diffusivity()
+    d = 5.0e-2
     l = 4
     epsilon = d
     lambda_1 = (-1 + sqrt(1 - 4 * epsilon * l)) / (-2 * epsilon)
@@ -58,7 +57,7 @@ refinement_patches = (
 # Create mesh with refinement patches
 mesh = TreeMesh(coordinates_min, coordinates_max,
     initial_refinement_level=3,
-    refinement_patches=refinement_patches,  # Add this parameter
+    refinement_patches=refinement_patches, 
     periodicity=false,
     n_cells_max=80_000)
 
