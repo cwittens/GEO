@@ -56,6 +56,7 @@ boundary_conditions_hyperbolic = (;
     z_pos=boundary_condition_do_nothing)
 
 boundary_conditions_parabolic = BoundaryConditionDirichlet(initial_condition)
+boundary_conditions_parabolic = BoundaryConditionNeumann((x, t, equations) -> SVector(0.0))
 
 semi = SemidiscretizationHyperbolicParabolic(mesh,
                                              (equations_hyperbolic, equations_parabolic),
@@ -64,7 +65,7 @@ semi = SemidiscretizationHyperbolicParabolic(mesh,
                                              boundary_conditions = (boundary_conditions_hyperbolic,
                                                                     boundary_conditions_parabolic))
 # Create ODE problem with time span `tspan`
-tspan = (0.0, 0.5)
+tspan = (0.0, 0.1)
 ode = semidiscretize(semi, tspan)
 
 callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval = 100))
@@ -76,5 +77,5 @@ sol = solve(ode, RDPK3SpFSAL49(); abstol = time_int_tol, reltol = time_int_tol,
 begin
     pd = PlotData2D(sol)
     plot(pd["phi"], clims=(0.0, 1.0))
-    plot!(getmesh(pd))
+    # plot!(getmesh(pd))
 end

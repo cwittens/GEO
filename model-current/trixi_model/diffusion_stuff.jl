@@ -1,5 +1,5 @@
 # load internal functions and structs we need
-using Trixi: AbstractEquationsParabolic, BoundaryConditionDirichlet
+using Trixi: AbstractEquationsParabolic, BoundaryConditionDirichlet, BoundaryConditionConstantNeumann, Gradient, Divergence 
 
 #  load internal functions and structs we need to modify / add functionality
 import Trixi: varnames, flux
@@ -35,7 +35,7 @@ end
     u_inner,
     normal::AbstractVector,
     x, t,
-    operator_type::Trixi.Gradient,
+    operator_type::Gradient,
     equations_parabolic::DiffusionConvectionParabolic3D)
     return boundary_condition.boundary_value_function(x, t, equations_parabolic)
 end
@@ -46,7 +46,24 @@ end
     u_inner,
     normal::AbstractVector,
     x, t,
-    operator_type::Trixi.Divergence,
+    operator_type::Divergence,
     equations_parabolic::DiffusionConvectionParabolic3D)
+    return flux_inner
+end
+
+
+@inline function (boundary_condition::BoundaryConditionNeumann)(flux_inner, u_inner,
+                                                                normal::AbstractVector,
+                                                                x, t,
+                                                                operator_type::Divergence,
+                                                                equations_parabolic::DiffusionConvectionParabolic3D)
+    return boundary_condition.boundary_normal_flux_function(x, t, equations_parabolic)
+end
+
+@inline function (boundary_condition::BoundaryConditionNeumann)(flux_inner, u_inner,
+                                                                normal::AbstractVector,
+                                                                x, t,
+                                                                operator_type::Gradient,
+                                                                equations_parabolic::DiffusionConvectionParabolic3D)
     return flux_inner
 end
