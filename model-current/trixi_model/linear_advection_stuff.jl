@@ -41,7 +41,7 @@ function max_abs_speed_naive(u_ll, u_rr, orientation::Integer,
         v_rr = vz_rr
     end
 
-    return max(abs(v_ll), abs(v_rr))
+    return 0.01*max(abs(v_ll), abs(v_rr))
 end
 
 
@@ -67,11 +67,11 @@ function flux_nonconservative(u_mine, u_other, orientation,
 
     # Select the appropriate velocity component based on spatial orientation
     if orientation == 1        # x-direction
-        v_component = vx_mine
+        v_component = vx_mine * Lx_inv_c
     elseif orientation == 2    # y-direction  
-        v_component = vy_mine
+        v_component = vy_mine * Ly_inv_c
     else  # orientation == 3   # z-direction
-        v_component = vz_mine
+        v_component = vz_mine * Lz_inv_c
     end
 
     # Return contributions to each equation

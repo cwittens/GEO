@@ -23,11 +23,11 @@ function flux(u, gradients, orientation::Integer,
 
     dudx, dudy, dudz = gradients
     if orientation == 1
-        return SVector(diffusivity * dudx[1], null, null, null, null)
+        return SVector(Lx2_inv_c * diffusivity * dudx[1], null, null, null, null)
     elseif orientation == 2
-        return SVector(diffusivity * dudy[1], null, null, null, null)
+        return SVector(Ly2_inv_c * diffusivity * dudy[1], null, null, null, null)
     else
-        return SVector(diffusivity * dudz[1], null, null, null, null)
+        return SVector(Lz2_inv_c * diffusivity * dudz[1], null, null, null, null)
     end
 end
 

@@ -31,11 +31,29 @@ println("Julia has access to $(Threads.nthreads()) threads")
 # = 0
 
 
-all_physical_parameters = set_up_physics()
 
-function initial_condition_borehole_params(x, t, equation, all_physical_parameters)
-    (; r1, t1, r2, t2, ϕ0, df, uf, ϕs, dp, xc, yc, dr) = all_physical_parameters
-    r = sqrt((x[1] - xc)^2 + (x[2] - yc)^2)
+
+Lx = 1.0 # length in x direction
+Ly = 1.0 # length in y direction
+Lz = 10.0 # length in z direction
+
+all_physical_parameters = set_up_physics(Lx, Ly, Lz)
+
+const Lx_inv_c = 1.0 / Lx
+const Ly_inv_c = 1.0 / Ly
+const Lz_inv_c = 1.0 / Lz
+const Lx2_inv_c = 1.0 / Lx^2
+const Ly2_inv_c = 1.0 / Ly^2
+const Lz2_inv_c = 1.0 / Lz^2
+
+function initial_condition_borehole_params(x_prime, t, equation, all_physical_parameters)
+    (; Lx, Ly, Lz, r1, t1, r2, t2, ϕ0, df, uf, ϕs, dp, xc, yc, dr) = all_physical_parameters
+    (x_min, y_min, z_min) = (0.0, 0.0, 0.0)
+    x_phys = x_min + x_prime[1] * Lx
+    y_phys = y_min + x_prime[2] * Ly
+    z_phys = z_min + x_prime[3] * Lz
+
+    r = sqrt((x_phys - xc)^2 + (y_phys - yc)^2)
     if r < r1 # inside inner pipe
         d_val = df
         vx_val = 0
@@ -65,7 +83,7 @@ function initial_condition_borehole_params(x, t, equation, all_physical_paramete
         vx_val = 0
         vy_val = 0
         vz_val = 0
-        ϕ_val = ϕ0(x[3])
+        ϕ_val = ϕ0(z_phys)
     end
 
     SVector(ϕ_val, vx_val, vy_val, vz_val, d_val)
@@ -91,7 +109,7 @@ T_zend = all_physical_parameters.ϕ0(zend)
 # domain needs to be a cube for TreeMesh
 # TODO: change to non-dimensional coordinates to account for different lengths in x,y,z direction
 coordinates_min = (0.0, 0.0, 0.0) # minimum coordinates (min(x), min(y), min(z))
-coordinates_max = (10.0, 10.0, 10.0) # maximum coordinates (max(x), max(y), max(z))
+coordinates_max = (1.0, 1.0, 1.0) # maximum coordinates (max(x), max(y), max(z))
 
 
 region_min0 = (0.0, 0.0, 0.0)
@@ -107,6 +125,14 @@ region_max2 = (0.8, 0.8, 10.0)
 refinement_patches = (
     # First refinement patch 
     (type="box",
+        coordinates_min=(0.0, 0.0, 0.0),
+        coordinates_max=(5.0, 5.0, 10.0)),
+
+       (type="box",
+        coordinates_min=region_min0,
+        coordinates_max=region_max0),
+
+       (type="box",
         coordinates_min=region_min0,
         coordinates_max=region_max0),
 
@@ -120,9 +146,9 @@ refinement_patches = (
         coordinates_max=region_max1),
 
     # Third refinement patch - even finer
-    (type="box",
-        coordinates_min=region_min2,
-        coordinates_max=region_max2),
+    # (type="box",
+    #     coordinates_min=region_min2,
+    #     coordinates_max=region_max2),
     #
     # (type="box",
     #     coordinates_min=region_min2,
@@ -133,8 +159,24 @@ refinement_patches = (
         coordinates_min=region_min2,
         coordinates_max=region_max2),)
 
+
+
+refinement_patches = (
+    (type="box",
+        coordinates_min=region_min2,
+        coordinates_max=region_max2),
+
+    # First refinement patch 
+    (type="box",
+        coordinates_min=region_min2,
+        coordinates_max=region_max2),
+        (type="box",
+        coordinates_min=(0.3, 0.3, 0.0),
+        coordinates_max=(0.7, 0.7, 1.0)),
+
+)
 mesh = TreeMesh(coordinates_min, coordinates_max,
-    initial_refinement_level=3,
+    initial_refinement_level=2,
     refinement_patches=refinement_patches,
     n_cells_max=1000000,
     periodicity=false)
@@ -157,7 +199,7 @@ boundary_conditions_hyperbolic = (;
     z_neg=boundary_condition_do_nothing,
     y_pos=boundary_condition_do_nothing,
     x_pos=boundary_condition_do_nothing,
-    z_pos=BoundaryConditionDirichlet(initial_condition)
+    z_pos=BoundaryConditionDirichlet(initial_condition),
 )
 
 bc_neumann = BoundaryConditionNeumann((x, t, equations) -> SVector(0.0))
@@ -167,7 +209,8 @@ boundary_conditions_parabolic = (;
     z_neg=bc_neumann,
     y_pos=bc_neumann,
     x_pos=bc_neumann,
-    z_pos=BoundaryConditionDirichlet(initial_condition)
+    z_pos=bc_neumann,
+    # z_pos=BoundaryConditionDirichlet(initial_condition)
 )
 
 
@@ -184,23 +227,25 @@ u0 = ode.u0
 
 # Create plot data and visualize the mesh
 pd = PlotData2D(u0, semi)
-plot(getmesh(pd), xlims=(0.0, 1.0), ylims=(0.0, 1.0))
+plot(getmesh(pd))#, xlims=(0.0, 1.0), ylims=(0.0, 1.0))
+# plot(getmesh(pd), xlims=(0.0, 1.0), ylims=(0.0, 1.0))
 
-
-tspan = (0.0, 20.0)
+tspan = (0.0, 2400.0)
 ode = semidiscretize(semi, tspan)
 callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval=10))
 time_int_tol = 1.0e-3
 
-saveat = range(tspan..., 11)
+saveat = range(tspan..., 110)
 sol = solve(ode, RDPK3SpFSAL49(); abstol=time_int_tol, reltol=time_int_tol,
 saveat=saveat,
     callback=callbacks);
 
 begin
-    pd = PlotData2D(sol.u[end], semi, slice=:xy, point=(0.0, 0.0, 9))
-    p = plot(pd["ε*vz"],)# clims=(20.0, 25.0))
-    # plot!(getmesh(pd))
-    plot!(p, xlims=(0.0, 1.0), ylims=(0.0, 1.0))
+    i = 7
+    z = 0.2
+    pd = PlotData2D(sol.u[i], semi, slice=:xy, point=(0.0, 0.0, z))
+    p = plot(pd["phi"], clims=(20.0, 25.0))
+    plot!(getmesh(pd))
+    plot!(p, xlims=(0.0, 1.0), ylims=(0.0, 1.0), title="t = $(round(sol.t[i], digits=2)) s and z = $(z*Lx) m")
 end
 

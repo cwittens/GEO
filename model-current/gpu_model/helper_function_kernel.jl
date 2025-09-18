@@ -9,7 +9,7 @@ function get_grid(N, min, max)
 end
 
 
-function initial_condition(x, y, z, xc, yc, all_physical_parameters)
+function initial_condition2(x, y, z, xc, yc, all_physical_parameters)
     (; r1, t1, r2, t2, ϕ0, df, uf, ϕs, dp) = all_physical_parameters
     r = sqrt((x - xc)^2 + (y - yc)^2)
     if r < r1 # inside inner pipe

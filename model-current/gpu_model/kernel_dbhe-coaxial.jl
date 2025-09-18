@@ -27,7 +27,7 @@ using Adapt
 using CUDA
 using AMDGPU
 
-include("helper_function.jl")
+include(joinpath(@__DIR__, "helper_functions_kernel.jl"))
 
 
 # Create experiment folder #####################################################
@@ -150,7 +150,7 @@ xmin, xmax = 0.0, 1.0
 ymin, ymax = 0.0, 1.0
 zmin, zmax = 0.0, h2 + 1
 
-nn = 5
+nn = 2
 Nx = nn * 100 + 1
 Ny = nn * 100 + 1
 Nz = nn * 80 + 1
@@ -177,7 +177,7 @@ for (i, x) in enumerate(gridx)
     for (j, y) in enumerate(gridy)
         for (k, z) in enumerate(gridz)
             d[i, j, k], vx[i, j, k], vy[i, j, k], vz[i, j, k], ϕ[i, j, k] =
-                initial_condition(x, y, z, xc, yc, all_physical_parameters)
+                initial_condition2(x, y, z, xc, yc, all_physical_parameters)
         end
     end
 end
@@ -210,6 +210,15 @@ callback, saved_values = save_and_print_callback(saveat, write_to_file=false)
 for (i, t) in enumerate(saved_values.t)
     temp = saved_values.saveval[i][Nx÷2, Ny÷2, Nz-1]
     println("using adaptive time integration: t = $(round(t, digits = 2)) s, ϕ = $(round(temp, digits = 4)) °C")
+end
+
+
+begin
+i = 4
+zslice = gridz[Nz-1]
+heatmap(saved_values.saveval[i][:, :, Nz-1]', clims=(20.0, 25.0), aspect_ratio=1,
+    title="t = $(round(saved_values.t[i], digits=2)) s, z = $(round(zslice, digits=3)) m",
+    xlabel="x [m]", ylabel="y [m]", size =(600, 500))
 end
 
 
