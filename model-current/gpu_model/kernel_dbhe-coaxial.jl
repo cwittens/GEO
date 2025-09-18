@@ -27,7 +27,7 @@ using Adapt
 using CUDA
 using AMDGPU
 
-include(joinpath(@__DIR__, "helper_functions_kernel.jl"))
+include(joinpath(@__DIR__, "helper_function_kernel.jl"))
 
 
 # Create experiment folder #####################################################
@@ -197,13 +197,13 @@ backend = CPU() # or ROCBackend() or CUDABackend() or CPU()
 cache = create_cache(backend=backend, d=d, vx=vx, vy=vy, vz=vz, gridx=gridx, gridy=gridy, gridz=gridz, r1=r1, t1=t1, r2=r2, ε=ε)
 ϕ_adapt = adapt(backend, ϕ)
 
-tspan = (0.0, 30.0)
+tspan = (0.0, 2400.0)
 prob = ODEProblem(rhs!, ϕ_adapt, tspan, cache)
 
 
 
-saveat = range(tspan..., 16)
-saveat = 0:2:30 # if it is not a integer, file names will be with decimal point
+saveat = range(tspan..., 160)
+# saveat = 0:2:30 # if it is not a integer, file names will be with decimal point
 callback, saved_values = save_and_print_callback(saveat, write_to_file=false)
 @time sol = solve(prob, Tsit5(), save_everystep=false, abstol=1e-3, reltol=1e-3, callback=callback);
 
@@ -214,11 +214,14 @@ end
 
 
 begin
-i = 4
-zslice = gridz[Nz-1]
-heatmap(saved_values.saveval[i][:, :, Nz-1]', clims=(20.0, 25.0), aspect_ratio=1,
-    title="t = $(round(saved_values.t[i], digits=2)) s, z = $(round(zslice, digits=3)) m",
-    xlabel="x [m]", ylabel="y [m]", size =(600, 500))
+    i = 150
+    zslice = gridz[Nz-1]
+    heatmap(saved_values.saveval[i][:, :, Nz-1]',
+        # clims=(20.0, 25.0),
+        aspect_ratio=1,
+        title="t = $(round(saved_values.t[i], digits=2)) s, z = $(round(zslice, digits=3)) m",
+        xlabel="x [m]", ylabel="y [m]",
+        size=(600, 500))
 end
 
 
