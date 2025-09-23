@@ -41,7 +41,7 @@ function max_abs_speed_naive(u_ll, u_rr, orientation::Integer,
         v_rr = vz_rr
     end
 
-    return 0.01*max(abs(v_ll), abs(v_rr))
+    return max(abs(v_ll), abs(v_rr))
 end
 
 
@@ -110,7 +110,7 @@ end
     # the interpretation of global SBP operators coupled discontinuously via
     # central fluxes/SATs
     combined_flux = flux_conservative + 0.5f0 * flux_nonconservative
-
+    # combined_flux = flux_conservative +  flux_nonconservative
     return combined_flux
 end
 
@@ -132,6 +132,8 @@ end
     # the interpretation of global SBP operators coupled discontinuously via
     # central fluxes/SATs
     combined_flux = flux_conservative + 0.5f0 * flux_nonconservative
+
+    # combined_flux = flux_conservative +  flux_nonconservative
     
     return combined_flux
 end

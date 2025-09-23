@@ -12,7 +12,7 @@ using Trixi
 using OrdinaryDiffEqTsit5
 using OrdinaryDiffEqLowStorageRK
 using Plots
-
+# Rock2
 include(joinpath(@__DIR__, "diffusion_stuff.jl"))
 include(joinpath(@__DIR__, "linear_advection_stuff.jl"))
 include(joinpath(@__DIR__, "helper_functions.jl"))
@@ -30,7 +30,15 @@ println("Julia has access to $(Threads.nthreads()) threads")
 # ∂ϕ/∂t + ∂(ε'vx ϕ - d ∂ϕ/∂x)/∂x + ∂(ε'vy ϕ - d ∂ϕ/∂y)/∂y + ∂(ε'vz ϕ - d ∂ϕ/∂z)/∂z
 # = 0
 
-
+# questions
+# all definitions of fluxes correct?
+# why p4mesh not working / so much slower
+# rescaling of z the way to go?
+# good way to do boundary conditions / water going up?
+# better way to handle auxiliary variables (big memory use)- maybe calculate on the fly?
+# how do discretize when doing FD? (or do FV or ...)
+# other tips and tricks?
+# "easy" non uniform mesh enough here?
 
 
 Lx = 1.0 # length in x direction
@@ -45,6 +53,7 @@ const Lz_inv_c = 1.0 / Lz
 const Lx2_inv_c = 1.0 / Lx^2
 const Ly2_inv_c = 1.0 / Ly^2
 const Lz2_inv_c = 1.0 / Lz^2
+# maybe work with closing functions (as in initial condition)
 
 function initial_condition_borehole_params(x_prime, t, equation, all_physical_parameters)
     (; Lx, Ly, Lz, r1, t1, r2, t2, ϕ0, df, uf, ϕs, dp, xc, yc, dr) = all_physical_parameters
@@ -126,22 +135,16 @@ refinement_patches = (
     # First refinement patch 
     (type="box",
         coordinates_min=(0.0, 0.0, 0.0),
-        coordinates_max=(5.0, 5.0, 10.0)),
-
-       (type="box",
+        coordinates_max=(5.0, 5.0, 10.0)), (type="box",
         coordinates_min=region_min0,
-        coordinates_max=region_max0),
-
-       (type="box",
+        coordinates_max=region_max0), (type="box",
         coordinates_min=region_min0,
         coordinates_max=region_max0),
 
     # Second refinement patch - even finer 
     (type="box",
         coordinates_min=region_min1,
-        coordinates_max=region_max1),
-
-        (type="box",
+        coordinates_max=region_max1), (type="box",
         coordinates_min=region_min1,
         coordinates_max=region_max1),
 
@@ -170,11 +173,9 @@ refinement_patches = (
     (type="box",
         coordinates_min=region_min2,
         coordinates_max=region_max2),
-        (type="box",
+    (type="box",
         coordinates_min=(0.3, 0.3, 0.0),
-        coordinates_max=(0.7, 0.7, 1.0)),
-
-)
+        coordinates_max=(0.7, 0.7, 1.0)),)
 mesh = TreeMesh(coordinates_min, coordinates_max,
     initial_refinement_level=2,
     refinement_patches=refinement_patches,
@@ -199,7 +200,8 @@ boundary_conditions_hyperbolic = (;
     z_neg=boundary_condition_do_nothing,
     y_pos=boundary_condition_do_nothing,
     x_pos=boundary_condition_do_nothing,
-    z_pos=BoundaryConditionDirichlet(initial_condition),
+    z_pos = boundary_condition_do_nothing,
+    # z_pos=BoundaryConditionDirichlet(initial_condition),
 )
 
 bc_neumann = BoundaryConditionNeumann((x, t, equations) -> SVector(0.0))
@@ -209,8 +211,8 @@ boundary_conditions_parabolic = (;
     z_neg=bc_neumann,
     y_pos=bc_neumann,
     x_pos=bc_neumann,
-    z_pos=bc_neumann,
-    # z_pos=BoundaryConditionDirichlet(initial_condition)
+    # z_pos=bc_neumann,
+    z_pos=BoundaryConditionDirichlet(initial_condition)
 )
 
 
@@ -219,7 +221,7 @@ semi = SemidiscretizationHyperbolicParabolic(mesh,
     (equations_hyperbolic, equations_parabolic),
     initial_condition,
     solver;
-    solver_parabolic=ViscousFormulationBassiRebay1(),
+    solver_parabolic=ViscousFormulationBassiRebay1(), # viscous LDG
     boundary_conditions=(boundary_conditions_hyperbolic, boundary_conditions_parabolic))
 # Create a dummy solution (at t=0)
 ode = semidiscretize(semi, (0.0, 0.0))
@@ -230,22 +232,29 @@ pd = PlotData2D(u0, semi)
 plot(getmesh(pd))#, xlims=(0.0, 1.0), ylims=(0.0, 1.0))
 # plot(getmesh(pd), xlims=(0.0, 1.0), ylims=(0.0, 1.0))
 
-tspan = (0.0, 2400.0)
+tspan = (0.0, 20.0)
 ode = semidiscretize(semi, tspan)
 callbacks = CallbackSet(SummaryCallback(), AliveCallback(analysis_interval=10))
 time_int_tol = 1.0e-3
 
-saveat = range(tspan..., 110)
+saveat = range(tspan..., 11)
 sol = solve(ode, RDPK3SpFSAL49(); abstol=time_int_tol, reltol=time_int_tol,
-saveat=saveat,
-    callback=callbacks);
+    saveat=saveat,
+    callback=callbacks
+);
 
 begin
-    i = 7
-    z = 0.2
+    i = 11
+    z = 0.995
     pd = PlotData2D(sol.u[i], semi, slice=:xy, point=(0.0, 0.0, z))
-    p = plot(pd["phi"], clims=(20.0, 25.0))
-    plot!(getmesh(pd))
-    plot!(p, xlims=(0.0, 1.0), ylims=(0.0, 1.0), title="t = $(round(sol.t[i], digits=2)) s and z = $(z*Lx) m")
+    p = plot(pd["phi"])
+    plot!(p, getmesh(pd))
+    # p2 = plot(p, xlims=(0.45, 0.55), ylims=(0.45, 0.55))
+    plot!(p, xlims=(0.0, 1.0), ylims=(0.0, 1.0), title="t = $(round(sol.t[i], digits=2)) s and z = $(z*Lx) m",
+    #  clims=(20.0, 25.0)
+     )
+
+     
 end
 
+p2
