@@ -1,3 +1,5 @@
+using Pkg
+Pkg.activate(@__DIR__)
 using LinearAlgebra
 using .Threads
 using WriteVTK
@@ -16,6 +18,7 @@ include("utils.jl")
 
 # Create experiment folder #####################################################
 path = joinpath(@__DIR__, "results")
+
 rm(path, recursive=true, force=true)
 mkpath(path)
 
@@ -146,6 +149,7 @@ for k in 1:kk
             xi = i * dx
             r = sqrt((x - xc)^2 + (y - yc)^2)
             R[i, j, k] = r
+
             if r < r1  # inside inner pipe
                 d[i, j, k] = df
                 vx[i, j, k] = 0
@@ -192,11 +196,14 @@ save(path, "diff_coeff", d, rx, ry, rz, 0)
 
 # Solve eq. system
 function updateϕ_domain!(ϕ2, ϕ1, d, vx, vy, vz, dx, dy, dz, dt, xc, yc, r1, t1, r2, ε, kk, jj, ii)
+
     @threads for k = 2:kk-1
         for j = 2:jj-1
             for i = 2:ii-1
                 # Convective term
+
                 xi, yj = i * dx, j * dy
+
                 r = sqrt((xi - xc)^2 + (yj - yc)^2)
                 if r < r1  # inside inner pipe 
                     conv = (ε * vx[i, j, k] * (ϕ1[i+1, j, k] - ϕ1[i, j, k]) / dx
@@ -238,8 +245,9 @@ function updateϕ_boundaries!(ϕ, ii, jj, kk, dx, dy, dz)
 end
 
 # Run simulation
-@time for t = 0:2:tt
+for t = 0:2:tt
     # Update ϕ
+
     updateϕ_domain!(ϕ2, ϕ1, d, vx, vy, vz, dx, dy, dz, dt, xc, yc, r1, t1, r2, ε, kk, jj, ii)
     updateϕ_boundaries!(ϕ2, ii, jj, kk, dx, dy, dz)
 
@@ -253,6 +261,7 @@ end
         # save(path,"temperature",ϕ2,rx,ry,rz,t)
     end
 end
+
 
 1
 # 3209.602894 seconds (166.23 G allocations: 2.688 TiB, 7.91% gc time, 0.01% compilation time)
@@ -280,3 +289,4 @@ end
 # Iteration:26, time:26.0s, bottom temp:24.4279°C
 # Iteration:28, time:28.0s, bottom temp:24.5158°C
 # Iteration:30, time:30.0s, bottom temp:24.5901°C
+
