@@ -8,6 +8,82 @@ function get_grid(N, min, max)
     return range(min, max, length=N)
 end
 
+function set_up_physics()
+    # Physical parameters ##########################################################
+
+
+    # Earth surface temperature [°C]
+    ϕs = 20
+    # Rock temperature as a function of depth [°C]
+    ϕ0_open(d, ϕs) = ϕs + 0.5 * d
+    ϕ0(d) = ϕ0_open(d, ϕs) # to make sure we dont work with a global variable
+
+    # Rock: granite #########################################
+    # Rock density [g/m3]
+    ρr = 2750000
+    # Rock specific heat [J/(g °C)]
+    cr = 0.790
+    # Rock thermal conductivity [W/(m °C)]
+    λr = 2.62
+    # Rock diffusion coefficient
+    dr = λr / (ρr * cr)
+
+    # Pipes: polyethylene ####################################
+    # Inner pipe inside radius [m]
+    r1 = 0.1
+    # Inner pipe thickness [m]
+    t1 = 0.01
+    # Inner pipe height [m]
+    h1 = 8.5
+    # Outer pipe inside radius [m]
+    vol1 = π * r1^2 * h1
+    r2 = sqrt((vol1 + π * (r1 + t1)^2 * h1) / (h1 * π)) # <= vol1 = vol2 = π*r2^2*h1-π*(r1+t1)^2*h1
+    # Outer pipe thickness [m]
+    t2 = 0.01
+    # Outer pipe height [m]
+    h2 = 9
+    # Porosity: ratio of liquid volume to the total volume
+    ε = 1
+    # Pipe density [g/m3]
+    ρp = 961000
+    # Pipe specific heat [J/(g °C)]
+    cp = 2.9
+    # Pipe thermal conductivity [W/(m °C)]
+    λp = 0.54
+    # Pipe diffusion coefficient
+    dp = λp / (ρp * cp)
+
+    # Fluid: water #########################################
+    # Fluid density [g/m3]
+    ρf = 997000
+    # Fluid specific heat capacity [J/(g °C)]
+    cf = 4.184
+    # Fluid thermal conductivity [W/(m °C)]
+    λf = 0.6
+    # Fluid diffusion coefficient
+    df = λf / (ρf * cf)
+    # Flow speed [m/s]
+    uf = 0.01
+    vx0 = uf
+    vy0 = 0
+    vz0 = 0
+    # Characteristic linear dimension (diameter of the pipe) [m]
+    Lf = 2r1
+    # Fluid dynamic viscosity at 25 °C [Pa⋅s]
+    μf = 0.00089 # 0.0005465 at 50 °C
+    # Reynolds number
+    Re = ρf * uf * Lf / μf
+
+
+    # bore hole center
+    xc = 0.5
+    yc = 0.5
+
+    return (; ϕs, ρr, cr, λr, dr, ϕ0, r1, t1, h1, r2, t2, h2, ε, xc, yc,
+        ρp, cp, λp, dp, ρf, cf, λf, df, uf, vx0, vy0, vz0, Lf, μf, Re)
+end
+
+
 
 function initial_condition2(x, y, z, xc, yc, all_physical_parameters)
     (; r1, t1, r2, t2, ϕ0, df, uf, ϕs, dp) = all_physical_parameters
@@ -293,3 +369,250 @@ end
 
 
 
+r1 = 0.2
+t1 = 0.05
+# πr1^2 = πr2^2 - π(r1+t1)^2  =>
+r2 = sqrt(2r1^2 + 2r1 * t1 + t1^2)
+rp2 = r2 - r1 - t1
+v = 0.01
+
+gridz = range(-1.1 * rp2, 0.0, length=100)
+gridx = range(-1.1 * r2, 0.0, length=100)
+
+x = gridx[50]
+z = gridz[50]
+
+
+
+# uses globals
+function vz_field(x, z)
+    xshift = x + (r1 + 0.5 * t1)
+    R = sqrt(xshift^2 + z^2)
+    if R < 0.5 * t1
+        vz = 0.0
+    elseif R < rp2
+        θ = atan(z, xshift)
+        vz = v * cos(θ)
+    else
+        vz = 0.0
+    end
+
+    return vz
+end
+
+function vx_field(x, z)
+    xshift = x + (r1 + 0.5 * t1)
+    R = sqrt(xshift^2 + z^2)
+    if R < 0.5 * t1
+        vx = 0.0
+    elseif R < rp2
+        θ = atan(z, xshift)
+        vx = v * sin(θ)
+    else
+        vx = 0.0
+    end
+
+    return vx
+end
+
+
+VZ = [vz_field(x, z) for x in gridx, z in gridz]
+VX = [vx_field(x, z) for x in gridx, z in gridz]
+
+heatmap(gridx, gridz, VZ', xlabel="x [m]", ylabel="z [m]", title="Velocity field vz", colorbar_title="vz [m/s]", size=(600, 500), grid=true)
+
+
+
+
+using Plots
+
+begin
+    # Create parameter ranges
+    θ = range(pi / 4, pi, length=50)
+    φ = range(0, 2π, length=50)
+
+    # For a torus with major radius R and minor radius r:
+    R, r = 3, 1
+    x = [cos(v) * (R + r * cos(u)) for u in θ, v in φ]
+    y = [sin(v) * (R + r * cos(u)) for u in θ, v in φ]
+    z = [-r * sin(u) for u in θ, v in φ]
+
+    surface(x, y, z, zlims=(-1.0, 0.0))
+end
+
+φ_fixed = π / 4
+x_curve = [cos(u) * (R + r * cos(φ_fixed)) for u in θ]
+y_curve = [sin(u) * (R + r * cos(φ_fixed)) for u in θ]
+z_curve = [r * sin(φ_fixed) for u in θ]
+
+plot3d(x_curve, y_curve, z_curve)
+
+# Create parameter ranges
+θ = range(0, 2π, length=50)
+r = range(0.1, 2, length=50)  # r now varies instead of being constant
+
+# Fix φ to a specific value
+φ_fixed = π / 4  # or whatever angle you want
+R = 3
+
+# Parametric equations with varying r and fixed φ
+x = [cos(u) * (R + v * cos(φ_fixed)) for u in θ, v in r]
+y = [sin(u) * (R + v * cos(φ_fixed)) for u in θ, v in r]
+z = [v * sin(u) for u in θ, v in r]
+
+plot3d(x, y, z)
+
+
+
+# Plot several curves for different r values
+θ = range(0, 2π, length=50)
+r_values = [0.1, 0.3, 0.5, 1.0, 1.5, 2.0]
+φ_fixed = π / 4  # or whatever angle you want
+plot3d()  # Initialize empty plot
+
+for r_val in r_values
+    x = [cos(u) * (R + r_val * cos(φ_fixed)) for u in θ]
+    y = [sin(u) * (R + r_val * cos(φ_fixed)) for u in θ]
+    z = [r_val * sin(φ_fixed) for u in θ]
+    plot3d!(x, y, z)  # Add to existing plot
+end
+current()
+
+
+r1 = 0.1
+# Inner pipe thickness [m]
+t1 = 0.01
+# Inner pipe height [m]
+h1 = 8.5
+# Outer pipe inside radius [m]
+vol1 = π * r1^2 * h1
+r2full = sqrt((vol1 + π * (r1 + t1)^2 * h1) / (h1 * π)) # <= vol1 = vol2 = π*r2^2*h1-π*(r1+t1)^2*h1
+r2 = r2full - r1 - t1
+# Outer pipe thickness [m]
+t2 = 0.01
+
+y = 0.0
+x = 0.12
+x = 0.05
+z = -0.01
+# given x, y, z from center of torus
+
+phi = sign(y) * acos(x / sqrt(x^2 + y^2))
+
+
+r̃ = norm([x, y, z] .- [(r1 + 0.5 * t1) * cos(phi), (r1 + 0.5 * t1) * sin(phi), 0])
+
+theta = pi - asin(abs(z) / r̃)
+
+
+
+plot(asin)
+
+
+
+vx = (cos(phi) * (2 * r0 * (r1 - r2) * cos(theta) + (-2 * pi * r0 * r2 + pi * (-1 + r0) * t + 2 * r0 * (-r1 + r2) * theta) * sin(theta))) / (2 * pi)
+
+vy = (sin(phi) * (2 * r0 * (r1 - r2) * cos(theta) + (-2 * pi * r0 * r2 + pi * (-1 + r0) * t + 2 * r0 * (-r1 + r2) * theta) * sin(theta))) / (2 * pi)
+
+vz = ((-2 * pi * r0 * r2 + pi * (-1 + r0) * t + 2 * r0 * (-r1 + r2) * theta) * cos(theta) + 2 * r0 * (-r1 + r2) * sin(theta)) / (2 * pi)
+
+
+
+
+R = r1 + t1 / 2
+phi = pi
+n = 2
+f(theta, r0) = t1 / 2 + r0 * ((1 - (theta / pi)^n) * (r2 - t1 / 2) + (theta / pi)^n * (r1 - t1 / 2))
+X(theta, r0) = R * cos(phi) + f(theta, r0) * cos(theta) * cos(phi)
+Y(theta, r0) = R * sin(phi) + f(theta, r0) * cos(theta) * sin(phi)
+Z(theta, r0) = f(theta, r0) * -1 * sin(theta)
+
+THETA = range(0, pi, length=100)
+R0 = range(0, 1, length=8)
+
+Xvals = [X(theta, r0) for theta in THETA, r0 in R0]
+Zvals = [Z(theta, r0) for theta in THETA, r0 in R0]
+
+function arrows(theta, r0)
+    # n = 1
+    vx = (cos(phi) * (2 * r0 * (r1 - r2) * cos(theta) + (-2 * pi * r0 * r2 + pi * (-1 + r0) * t1 + 2 * r0 * (-r1 + r2) * theta) * sin(theta))) / (2 * pi)
+
+    vy = (sin(phi) * (2 * r0 * (r1 - r2) * cos(theta) + (-2 * pi * r0 * r2 + pi * (-1 + r0) * t1 + 2 * r0 * (-r1 + r2) * theta) * sin(theta))) / (2 * pi)
+
+    vz = ((-2 * pi * r0 * r2 + pi * (-1 + r0) * t1 + 2 * r0 * (-r1 + r2) * theta) * cos(theta) + 2 * r0 * (-r1 + r2) * sin(theta)) / (2 * pi)
+
+    # n = 2
+    vx = -0.5 * (cos(phi) * (4 * r0 * (-r1 + r2) * theta * cos(theta) +
+                             (pi^2 * (2 * r0 * r2 + t1 - r0 * t1) + 2 * r0 * (r1 - r2) * theta^2) * sin(theta))) / pi^2
+
+    vy = -0.5 * (sin(phi) * (4 * r0 * (-r1 + r2) * theta * cos(theta) +
+                             (pi^2 * (2 * r0 * r2 + t1 - r0 * t1) + 2 * r0 * (r1 - r2) * theta^2) * sin(theta))) / pi^2
+
+    vz = ((-(pi^2 * (2 * r0 * r2 + t1 - r0 * t1)) + 2 * r0 * (-r1 + r2) * theta^2) * cos(theta) + 4 * r0 * (-r1 + r2) * theta * sin(theta)) / (2 * pi^2)
+
+
+    return 0.01 * vx, 0.01 * vz
+end
+
+# scatter(Xvals, Zvals)
+# scatter!(Xvals[:,7], Zvals[:,7])
+
+
+
+
+
+# Subsample your parameter space to avoid overcrowding
+theta_vec = range(0, pi, length=50)  # fewer points than your surface
+r0_vec = range(0, 1, length=8)
+
+# Compute positions and vector components at each point
+X_arrows = []
+Z_arrows = []
+VX_arrows = []
+VZ_arrows = []
+
+for theta in theta_vec, r0 in r0_vec
+    # Position
+    x_pos = X(theta, r0)
+    z_pos = Z(theta, r0)
+
+    # Vector components
+    vx, vz = arrows(theta, r0)
+
+    push!(X_arrows, x_pos)
+    push!(Z_arrows, z_pos)
+    push!(VX_arrows, vx)
+    push!(VZ_arrows, vz)
+end
+
+# Plot
+scatter(Xvals, Zvals, alpha=0.6, label="Surface points")
+quiver!(X_arrows, Z_arrows, quiver=(VX_arrows, VZ_arrows),
+    color=:red, alpha=0.8, label="Vector field")
+
+
+
+
+
+
+
+# check inverse equations
+X1(theta, phi, r0) = R * cos(phi) + f(theta, r0) * cos(theta) * cos(phi)
+Y1(theta, phi, r0) = R * sin(phi) + f(theta, r0) * cos(theta) * sin(phi)
+Z1(theta, phi, r0) = f(theta, r0) * -1 * sin(theta)
+
+
+theta = pi / 2 - 0.7
+phi = 0.3
+r0 = 0.4
+x = X1(theta, phi, r0)
+y = Y1(theta, phi, r0)
+z = Z1(theta, phi, r0)
+
+phi_ = atan(y, x)
+r̃ = norm([x, y, z] .- [(r1 + 0.5 * t1) * cos(phi_), (r1 + 0.5 * t1) * sin(phi_), 0])
+z / r̃
+theta_ = -asin(z / r̃)
+
+r0_ = (r̃ - t1 / 2) / ((1 - (theta_ / pi)^2) *
+                       (r2 - t1 / 2) + (theta_ / pi)^2 * (r1 - t1 / 2))
