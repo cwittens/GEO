@@ -601,18 +601,26 @@ X1(theta, phi, r0) = R * cos(phi) + f(theta, r0) * cos(theta) * cos(phi)
 Y1(theta, phi, r0) = R * sin(phi) + f(theta, r0) * cos(theta) * sin(phi)
 Z1(theta, phi, r0) = f(theta, r0) * -1 * sin(theta)
 
-
-theta = pi / 2 - 0.7
-phi = 0.3
-r0 = 0.4
+begin
+theta = rand() * pi
+phi = 2(rand()-0.5)pi
+r0 = rand()
 x = X1(theta, phi, r0)
 y = Y1(theta, phi, r0)
 z = Z1(theta, phi, r0)
 
-phi_ = atan(y, x)
+phi_ = atan(y, x) 
 r̃ = norm([x, y, z] .- [(r1 + 0.5 * t1) * cos(phi_), (r1 + 0.5 * t1) * sin(phi_), 0])
-z / r̃
-theta_ = -asin(z / r̃)
+sin_theta = -z / r̃
+cos_theta = (sqrt(x^2 + y^2) - R) / r̃
+theta_ = atan(sin_theta, cos_theta)    # This handles all quadrants correctly
 
 r0_ = (r̃ - t1 / 2) / ((1 - (theta_ / pi)^2) *
                        (r2 - t1 / 2) + (theta_ / pi)^2 * (r1 - t1 / 2))
+
+x2 = X1(theta_, phi_, r0_)
+y2 = Y1(theta_, phi_, r0_)
+z2 = Z1(theta_, phi_, r0_)
+
+x ≈ x2, y ≈ y2, z ≈ z2
+end
